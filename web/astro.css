@@ -191,3 +191,84 @@ body:not(.read-off) #readtoggle{right:330px}
 @media (max-width:900px){
   body:not(.read-off) #wheel,body:not(.rail-off) #wheel{padding:0}
 }
+
+/* ══ 手机 ══════════════════════════════════════════
+   星盘页在 375px 下原本是三栏叠罗汉：侧栏占 0–212，解析栏从 85 起，
+   两者重叠，中间盘面只剩 207px 还被两边压着，#panel 宽 562 超出屏宽。
+   三栏在手机上摆不下，所以改成「盘面独占屏幕，资料与解析各是一张抽屉」。*/
+@media (max-width: 820px){
+  /* 盘面吃满，两侧不再让位；但抽屉展开时要往上让，
+     不让的话盘是按整屏居中的，下半个会被压在抽屉底下看不见。 */
+  #wheel{height:100dvh;padding:0}
+  body:not(.rail-off) #wheel{padding:0}
+  body:not(.read-off) #wheel{padding:0 0 58dvh}
+
+  /* 侧栏装的是出生表单，比星图页那个需要更多横向空间 */
+  #rail{width:min(320px,88vw)}
+
+  /* 解析栏从右侧竖栏改成底部抽屉 */
+  #read{
+    left:0;right:0;top:auto;bottom:0;width:auto;height:58dvh;
+    border-left:none;border-top:1px solid rgba(217,180,95,.22);
+    background:rgba(5,7,12,.98);
+    padding:20px 18px calc(80px + env(safe-area-inset-bottom));
+    box-shadow:0 -14px 40px rgba(0,0,0,.5);
+    transition:transform .42s cubic-bezier(.4,0,.2,1);
+  }
+  body.read-off #read{transform:translateY(100%)}
+  body:not(.read-off) #panel{padding-right:16px}
+
+  /* 开关沉到底部右侧，跟左边的「资料」对称，都按 44px 高 */
+  #readtoggle,
+  body:not(.read-off) #readtoggle{
+    right:12px;left:auto;bottom:calc(14px + env(safe-area-inset-bottom));top:auto;
+    transform:none;writing-mode:horizontal-tb;letter-spacing:.2em;
+    font-size:12px;padding:12px 16px;border-right:1px solid var(--ink-faint);
+    z-index:32;background:rgba(5,7,12,.94);
+  }
+
+  /* 排盘时间戳在手机顶栏里太长，会把「來源」挤出屏幕。
+     这个信息在解析栏顶部也有，这里省掉不丢东西。 */
+  #stamp{display:none}
+
+  /* 日历：格子 25px 手指点不准，放到 34px 上下 */
+  .calday{padding:7px 0;font-size:13px}
+  .calwk{font-size:10.5px;padding-bottom:4px}
+  .calnav{padding:4px 8px;font-size:14px}
+  .caltitle{font-size:13px}
+  #dstamp{font-size:13px;padding:7px 0 5px}
+
+  /* iOS 上字号小于 16px，聚焦输入框会自动放大整页 */
+  .form input[type=number],.form select{font-size:16px;padding:8px}
+  .form label{font-size:11.5px}
+  #cast{padding:13px;font-size:14px}
+
+  /* 盘面上的字要放大。SVG 的字号是 viewBox 单位，屏幕上的实际大小
+     等于「字号 × 缩放」。桌面上盘面缩放约 0.82，手机上只有 0.425 ——
+     同一个 10px 的度数标，桌面是 8.2px，手机上是 4.3px，读不了。
+     所以这里按 ~2.1 倍补回去。环带够宽，二十八个宿名放大后仍不挤：
+     中径周长约 1966 单位，28 个字各占 26，合计 644。 */
+  .glyph{font-size:40px}
+  .xname{font-size:26px}
+  .cname{font-size:22px}
+  .hnum{font-size:24px}
+  .bglyph{font-size:30px}
+  .bdeg{font-size:20px}
+  .mark{font-size:22px;letter-spacing:.1em}
+
+  /* 解析条目：手机上行宽窄，字距放松一点更好读 */
+  .rl.h{font-size:14px;letter-spacing:.18em}
+  .rl.b .rt{font-size:12.5px}
+  .rl.b .rb{font-size:12px;line-height:1.9}
+}
+
+/* 解析栏里可点的条目。手机上盘面被压到 0.425 倍，行星点直径只有 13px，
+   手指点不中 —— 这些行才是够得着的入口，桌面上顺带也能用。 */
+.rl.b.tapable{cursor:pointer;transition:background .18s ease}
+.rl.b.tapable .rt::after{
+  content:'›';color:rgba(217,180,95,.5);margin-left:6px;font-size:13px;
+}
+.rl.b.tapable:hover{background:rgba(232,226,212,.05)}
+@media (max-width: 820px){
+  .rl.b.tapable{margin:0 -8px 11px;padding:7px 8px}
+}

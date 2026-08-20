@@ -227,7 +227,10 @@ function pick(e){
   // 阈值必须换算成屏幕像素：放大之后 40 个 SVG 单位会占掉半个屏，
   // 那样点哪儿都命中；缩小时又小得点不着。
   const vbw = +svg.getAttribute('viewBox').split(/\s+/)[2];
-  const lim = 26 * vbw / svg.getBoundingClientRect().width;
+  // 手指的落点比鼠标散，容差放宽。这么做是安全的：下面永远取最近的那一组，
+  // lim 只决定「这一下收不收」，放宽不会让它更容易点错组，只会少漏几下。
+  const lim = (matchMedia('(hover: none)').matches ? 36 : 26)
+              * vbw / svg.getBoundingClientRect().width;
   let best = null, bd = 1e9;
   for (const g of CUL.groups){
     for (const h of g._members){
@@ -684,12 +687,39 @@ qBox.addEventListener('keydown', e => {
   }
 });
 
-document.getElementById('railtoggle').addEventListener('click', () => {
-  document.body.classList.toggle('rail-off');
-  // 栏宽变了，取景基准跟着变；不重算的话展开中的星官会被压在栏底下
+function toggleRail(force){
+  document.body.classList.toggle('rail-off', force);
+  // 栏宽变了，取景基准跟着变；不重算的话展开中的星官会被压在栏底下。
+  // 手机上侧栏是浮层不推正文，基准其实没变，重算一次也无害。
   if (sel) open(sel, NODEOF, 420);
   else if (DATA) frameOn(0, 0, R * 4.1 * 1.06, 420, 0);
-});
+}
+document.getElementById('railtoggle').addEventListener('click', () => toggleRail());
+
+/* ── 手机与触摸 ─────────────────────────────────
+   两件事 CSS 做不到，只能在这里补。
+
+   一、手机上侧栏默认收起。它在 375px 宽的屏上占 57%，
+       展开着的话第一眼看到的是名单，不是星图。
+
+   二、触摸设备上没有 mouseleave —— 手指抬起不触发任何「离开」。
+       桌面版靠 mouseleave 收提示卡，照搬到手机上就是卡片出来了
+       再也收不回去。这里改成：点到既不是星、也不是星官名的地方就收。
+       卡片自己要排除在外，否则点卡片里的字会把它关掉。 */
+if (matchMedia('(max-width: 820px)').matches) document.body.classList.add('rail-off');
+
+if (matchMedia('(hover: none)').matches){
+  document.addEventListener('click', e => {
+    // 遮罩是 body 的伪元素，点它事件落在 body 上 —— 借这个收侧栏
+    if (e.target === document.body && !document.body.classList.contains('rail-off')){
+      toggleRail(true);
+      return;
+    }
+    if (!e.target.closest('.hit,.linkhit,.gname,#tip,#card')){
+      hideTip(); hideCard();
+    }
+  });
+}
 
 // 按 / 直接聚焦搜索框，跟大多数工具一致
 addEventListener('keydown', e => {

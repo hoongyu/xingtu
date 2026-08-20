@@ -22,6 +22,7 @@ let DATA, chart = null, mode = 'west', plain = false, hsys = 'whole';
 let pick = { y: 2000, m: 1, d: 1 };            // 默认停在 2000-01-01
 let calY = 2000, calM = 1;
 let revealToken = 0;
+const narrow = matchMedia('(max-width: 820px)');
 
 /* 内置城市表。不用第三方地理编码 —— 出生地点是个人数据，
    没有理由为了查经纬度把它送出去。时区为标准时，夏令时另勾。 */
@@ -219,6 +220,12 @@ function draw(){
   }
 
   // 行星
+  // 手机上盘面缩放只有 0.425，r=15 的点在屏幕上直径才 13px，手指点不中。
+  // 视觉上的点略放大，另外垫一层透明的大命中圈；避让角度跟着一起放大，
+  // 不然放大后的点会互相压住。
+  const DOT = narrow.matches ? 22 : 15;
+  const HIT = narrow.matches ? 36 : 22;
+  const SEP = narrow.matches ? 11 : 6.5;
   const placed = [];
   for (const p of DATA.planets){
     const b = chart.bodies[p.n];
@@ -226,11 +233,12 @@ function draw(){
     if (mode === 'east' && (p.n === '上升' || p.n === '天顶')) continue;
     let a = off(mode === 'west' ? b.lon : b.ra);
     const gap = q => { const d = norm(a - q); return Math.min(d, 360 - d); };
-    while (placed.some(q => gap(q) < 6.5)) a = norm(a + 6.5);
+    while (placed.some(q => gap(q) < SEP)) a = norm(a + SEP);
     placed.push(a);
     const [x, y] = pos(a, ringP);
     const g = el('g', {}, 'body');
-    g.appendChild(el('circle', { cx: x, cy: y, r: 15 }, 'bdot'));
+    g.appendChild(el('circle', { cx: x, cy: y, r: HIT, fill: 'transparent' }));
+    g.appendChild(el('circle', { cx: x, cy: y, r: DOT }, 'bdot'));
     const t = el('text', { x, y: y + 7 }, 'bglyph');
     // 中式盘用中名的头一个字（日月水金火木土罗计），西洋盘用符号
     t.textContent = mode === 'east' && p.cn !== '—' ? p.cn[0] : p.g;
@@ -361,7 +369,8 @@ function lines(){
     L.push(['h', '西 洋 盘 · 传 统 读 法']);
     L.push(['k', '三 要 素']);
     for (const n of ['太阳', '月亮', '上升'])
-      L.push(['b', `${n} · ${sName(n)}座 ${B[n].deg.toFixed(1)}°`, compose(n)]);
+      L.push(['b', `${n} · ${sName(n)}座 ${B[n].deg.toFixed(1)}°`, compose(n),
+              ['planet', n]]);
 
     const cnt = { el: {}, q: {} };
     for (const p of DATA.planets){
@@ -386,14 +395,14 @@ function lines(){
       const b = B[p.n];
       L.push(['b',
         `${p.n} · ${sName(p.n)}座 ${b.deg.toFixed(1)}° · 第 ${b.house + 1} 宫`,
-        compose(p.n)]);
+        compose(p.n), ['planet', p.n]]);
     }
     if (chart.asp.length){
       L.push(['k', '主 要 相 位']);
       for (const a of chart.asp.slice(0, 6)){
         const d = DATA.aspects.find(x => x.n === a.type);
         L.push(['b', `${a.a} ${a.type} ${a.b}　相差 ${a.exact.toFixed(1)}°`,
-                plain ? d.p : d.t]);
+                plain ? d.p : d.t, ['asp', a]]);
       }
     }
   } else {
@@ -401,14 +410,15 @@ function lines(){
     const am = M[B['上升'].xiu];
     L.push(['k', '命 宫 所 临']);
     L.push(['b', `命宫在${am.n}宿　入宿 ${B['上升'].rudu.toFixed(1)}°`,
-            `${am.n}宿属${am.xiang}，分野在${am.guo}（${am.zhou}）。${am.zhan}`]);
+            `${am.n}宿属${am.xiang}，分野在${am.guo}（${am.zhou}）。${am.zhan}`,
+            ['xiu', B['上升'].xiu]]);
 
     L.push(['k', '七 政 所 临']);
     for (const n of SEVEN){
       const b = B[n], m = M[b.xiu];
       const p = DATA.planets.find(x => x.n === n);
       L.push(['b', `${p.cn}（${n}）在${m.n}宿 ${b.rudu.toFixed(1)}°`,
-              `${m.zhan}　分野 ${m.guo}·${m.zhou}`]);
+              `${m.zhan}　分野 ${m.guo}·${m.zhou}`, ['planet', n]]);
     }
 
     L.push(['k', '四 余 之 二']);
@@ -416,7 +426,7 @@ function lines(){
       const b = B[n], m = M[b.xiu];
       const p = DATA.planets.find(x => x.n === n);
       L.push(['b', `${p.cn}（${n}）在${m.n}宿 ${b.rudu.toFixed(1)}°`,
-              (plain ? p.p : p.t) + `　所临${m.n}宿，${m.zhan}`]);
+              (plain ? p.p : p.t) + `　所临${m.n}宿，${m.zhan}`, ['planet', n]]);
     }
 
     const xc = {};
@@ -448,13 +458,15 @@ async function runReading(){
   const box = $('read');
   const my = ++revealToken;
   box.innerHTML = '';
-  for (const [kind, a, b] of lines()){
+  for (const [kind, a, b, tap] of lines()){
     if (my !== revealToken) return;              // 已被新的一轮顶掉
     const row = document.createElement('div');
-    row.className = 'rl ' + kind;
+    row.className = 'rl ' + kind + (tap ? ' tapable' : '');
     row.innerHTML = kind === 'b'
       ? `<div class="rt">${a}</div><div class="rb">${b}</div>`
       : a;
+    // 手机上盘上那些点太小按不中，条目本身就是入口
+    if (tap) row.addEventListener('click', () => show(tap[0], tap[1]));
     box.appendChild(row);
     // 强制回流让初始状态落定，再加 .in ——
     // 不能用 requestAnimationFrame：标签页在后台时它根本不触发，
@@ -516,7 +528,12 @@ export function mount(){
     cast();
   });
 
-  $('cast').addEventListener('click', cast);
+  $('cast').addEventListener('click', () => {
+    cast();
+    // 手机上表单是盖住盘面的抽屉。排完盘还挡着的话，
+    // 用户看不到自己刚算出来的东西 —— 算完就让开。
+    if (narrow.matches) document.body.classList.add('rail-off');
+  });
   $('close').addEventListener('click', closePanel);
   $('back').addEventListener('click', closePanel);
   addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
@@ -540,6 +557,21 @@ export function mount(){
     () => document.body.classList.toggle('rail-off'));
   $('readtoggle').addEventListener('click',
     () => document.body.classList.toggle('read-off'));
+
+  /* 手机：出生表单默认收起，先让人看见盘和解析；
+     解析栏留着展开 —— 它才是这页的内容，藏起来等于白算。 */
+  if (narrow.matches) document.body.classList.add('rail-off');
+
+  /* 触摸设备没有 mouseleave，悬停卡出来了收不回去。同星图那边的处理。 */
+  if (matchMedia('(hover: none)').matches){
+    document.addEventListener('click', e => {
+      if (e.target === document.body && !document.body.classList.contains('rail-off')){
+        document.body.classList.add('rail-off');
+        return;
+      }
+      if (!e.target.closest('#card,#wheel .body,#wheel .sec,#wheel .asp')) hideCard();
+    });
+  }
 
   const srcBox = $('src');
   $('srcbtn').addEventListener('click', () => srcBox.classList.add('on'));
