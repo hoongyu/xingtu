@@ -14,7 +14,7 @@ import sys
 
 W = pathlib.Path(__file__).resolve().parents[1] / 'web'
 ASSETS = ['engine.css', 'engine.js', 'sky.config.js', 'concept.config.js',
-          'astro.css', 'astro.js', 'ephem.js']
+          'astro.css', 'astro.js', 'ephem.js', 'places.js']
 
 
 def digest(name):
@@ -38,7 +38,11 @@ def main():
 
     # 模块内部的相对导入也要打戳。_headers 给 .js 设了一年不可变缓存，
     # 漏掉的那个会被永久缓存住 —— 顺序不能反：先改引用，再算被改文件的哈希。
-    INNER = [('astro.js', 'ephem.js')]
+    # places.js 被两个页面共用，两处引用都要打戳。
+    # 被依赖的那几个都是叶子（自己不再 import 别的带戳资源），
+    # 所以「先改引用、再算哈希」这个顺序仍然成立。
+    INNER = [('astro.js', 'ephem.js'), ('astro.js', 'places.js'),
+             ('sky.config.js', 'places.js')]
     for host, dep in INNER:
         hp = W / host
         t = hp.read_text(encoding='utf-8')

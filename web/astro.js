@@ -11,6 +11,7 @@
  * 出生数据只在浏览器里算，不发往任何服务器。
  */
 import { compute, houses, houseOf, aspects } from './ephem.js?v=8c8e7925';
+import { PLACES, label as placeLabel } from './places.js?v=fc19c9d0';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
@@ -18,62 +19,13 @@ const $ = id => document.getElementById(id);
 const norm = a => ((a % 360) + 360) % 360;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-let DATA, chart = null, mode = 'west', plain = false, hsys = 'whole';
+// plain 默认为真 —— 这一页先要说得懂，术语版是给想看原措辞的人留的选项。
+let DATA, chart = null, mode = 'west', plain = true, hsys = 'whole';
 let pick = { y: 2000, m: 1, d: 1 };            // 默认停在 2000-01-01
 let calY = 2000, calM = 1;
 let revealToken = 0;
 const narrow = matchMedia('(max-width: 820px)');
 
-/* 地点表：省级行政区三十四个，外加德国。
-   每项 [名, 参照点, 纬度, 经度, 标准时区]。
-
-   有一句必须说在前头：省是一个面，不是一个点。上升点由当地恒星时定，
-   而恒星时直接跟经度走 —— 经度差 15 度就是一小时赤经，上升点能挪
-   将近一个星座。内蒙古从东经 97 度到 126 度，跨 29 度；新疆跨得更多。
-   所以每一项都注明实际用的那个参照点（省会），选项里直接写出来，
-   不藏。要精确到出生的那个县，得给经纬度，那是另一种输入方式。
-
-   时区一律 +8（含港澳台）。新疆另有一说：官方用北京时间，
-   民间常用「新疆时间」即 +6，出生记录写的是哪个得自己确认。
-
-   仍然不调用任何地理编码服务 —— 出生地点是个人数据。 */
-const PLACES = [
-  ['北京',   '北京',       39.90, 116.41, 8],
-  ['天津',   '天津',       39.14, 117.20, 8],
-  ['上海',   '上海',       31.23, 121.47, 8],
-  ['重庆',   '重庆',       29.56, 106.55, 8],
-  ['河北',   '石家庄',     38.04, 114.51, 8],
-  ['山西',   '太原',       37.87, 112.55, 8],
-  ['辽宁',   '沈阳',       41.80, 123.43, 8],
-  ['吉林',   '长春',       43.90, 125.32, 8],
-  ['黑龙江', '哈尔滨',     45.80, 126.53, 8],
-  ['江苏',   '南京',       32.06, 118.80, 8],
-  ['浙江',   '杭州',       30.27, 120.15, 8],
-  ['安徽',   '合肥',       31.86, 117.28, 8],
-  ['福建',   '福州',       26.07, 119.30, 8],
-  ['江西',   '南昌',       28.68, 115.86, 8],
-  ['山东',   '济南',       36.65, 117.12, 8],
-  ['河南',   '郑州',       34.75, 113.63, 8],
-  ['湖北',   '武汉',       30.59, 114.31, 8],
-  ['湖南',   '长沙',       28.23, 112.94, 8],
-  ['广东',   '广州',       23.13, 113.26, 8],
-  ['海南',   '海口',       20.04, 110.20, 8],
-  ['四川',   '成都',       30.57, 104.07, 8],
-  ['贵州',   '贵阳',       26.65, 106.63, 8],
-  ['云南',   '昆明',       25.04, 102.71, 8],
-  ['陕西',   '西安',       34.34, 108.94, 8],
-  ['甘肃',   '兰州',       36.06, 103.83, 8],
-  ['青海',   '西宁',       36.62, 101.78, 8],
-  ['台湾',   '台北',       25.03, 121.57, 8],
-  ['内蒙古', '呼和浩特',   40.84, 111.75, 8],
-  ['广西',   '南宁',       22.82, 108.32, 8],
-  ['西藏',   '拉萨',       29.65,  91.14, 8],
-  ['宁夏',   '银川',       38.49, 106.23, 8],
-  ['新疆',   '乌鲁木齐',   43.83,  87.62, 8],
-  ['香港',   '香港',       22.32, 114.17, 8],
-  ['澳门',   '澳门',       22.20, 113.54, 8],
-  ['德国',   '柏林',       52.52,  13.40, 1],
-];
 
 /* ── 盘面几何 ──────────────────────────────────
    上升点摆在左边、黄道逆时针展开，是星盘两千年的画法。
@@ -204,6 +156,76 @@ function cast(){
     a.moving = Math.abs(sep(later.bodies, a.a, a.b) - target) < a.orb
       ? '入相' : '出相';
   }
+
+  /* ── 落到生活上的那几层，需要的几个量 ───────────────────
+     宫主星：一个宫头落在哪个星座，那个星座的传统主星就是这一宫的主星。
+     传统上看「这件事从哪儿来」就看宫主星落在第几宫 —— 七宫主看伴侣
+     从哪儿遇上，十宫主看事业机会从哪儿来。同一条规矩，两处用。 */
+  const rulerOf = lonDeg => DATA.signs[Math.floor(norm(lonDeg) / 30)].r0;
+  c.h7 = { sign: DATA.signs[Math.floor(norm(c.cusp[6]) / 30)].n,
+           ruler: rulerOf(c.cusp[6]) };
+  c.h2 = { sign: DATA.signs[Math.floor(norm(c.cusp[1]) / 30)].n,
+           ruler: rulerOf(c.cusp[1]) };
+  c.h10 = { sign: DATA.signs[Math.floor(norm(c.cusp[9]) / 30)].n,
+            ruler: rulerOf(c.cusp[9]) };
+  c.mcSign = DATA.signs[Math.floor(norm(c.mc) / 30)].n;
+
+  /* ── 时机 ───────────────────────────────────────────────
+     这一节的年份是**算出来的**：把行星推到它回到出生黄经的那一刻。
+     做法是先用平均周期估一个日子，再迭代几次收敛 ——
+     每次拿当天的实际黄经与本命黄经作差，按平均速度折算成天数补上。
+     六次足够收到一天以内。
+
+     一个必须说明白的地方：土星会逆行，所以它回到本命位置这件事
+     实际会来回发生三次，前后拖约一年。下面写的是中间那一次的估计，
+     所以措辞用「约」，不给假的精确。 */
+  const DAY = 86400000;
+  const atUTC = dt => compute(dt.getUTCFullYear(), dt.getUTCMonth() + 1,
+    dt.getUTCDate(), dt.getUTCHours() + dt.getUTCMinutes() / 60, 0, lat, lon);
+  const birthUTC = new Date(Date.UTC(pick.y, pick.m - 1, pick.d, 0,
+    Math.round((hh + mm / 60 - tz - dst) * 60)));
+
+  /* 求回归：粗扫找过零点，再二分。
+     不用「按平均速度迭代」那种解法 —— 试过，木星上不收敛：
+     它每年逆行约四个月，实际速度在 +0.24 到 -0.14 度/日之间摆，
+     按平均速度补步长会走错方向，实测误差到 19 度。
+     改成扫描之后误差落在 0.0002 度以内，一次求解约 3 毫秒。
+
+     返回的是一个数组而不是一个日子：行星逆行时会来回三次经过本命位置，
+     前后能拖一年。那是真实现象，不该被抹成一个「约」。 */
+  function returnsOf(name, periodY, k){
+    const natal = c.bodies[name].lon;
+    const g = t => { const d = norm(atUTC(new Date(t)).bodies[name].lon - natal);
+                     return d > 180 ? d - 360 : d; };
+    const mid = birthUTC.getTime() + periodY * k * 365.2422 * DAY;
+    const W = 400 * DAY, S = 4 * DAY;
+    const hits = [];
+    let pt = mid - W, pv = g(pt);
+    for (let t = pt + S; t <= mid + W; t += S){
+      const v = g(t);
+      // 两侧都靠近 0 才算真过零 —— 否则 ±180 那个环绕点会被当成解
+      if (pv * v < 0 && Math.abs(pv) + Math.abs(v) < 12){
+        let lo = pt, hi = t, flo = pv;
+        for (let i = 0; i < 24; i++){
+          const m = (lo + hi) / 2, fm = g(m);
+          if (flo * fm <= 0) hi = m; else { lo = m; flo = fm; }
+        }
+        hits.push(new Date((lo + hi) / 2));
+      }
+      pt = t; pv = v;
+    }
+    return hits;
+  }
+  c.saturnReturn = [returnsOf('土星', 29.457, 1), returnsOf('土星', 29.457, 2)];
+  c.jupiterReturns = [1, 2, 3, 4, 5, 6, 7].map(k => returnsOf('木星', 11.862, k));
+  // 当下的行运：慢的两颗才够得上「时机」，快的一年跑好几圈，说了等于没说。
+  const nowC = atUTC(new Date());
+  c.now = { date: new Date(), bodies: nowC.bodies };
+  c.transit = ['木星', '土星'].map(n => ({
+    n, lon: nowC.bodies[n].lon,
+    sign: DATA.signs[Math.floor(nowC.bodies[n].lon / 30)].n,
+    house: houseOf(nowC.bodies[n].lon, c.cusp),
+  }));
 
   chart = c;
   draw();
@@ -589,6 +611,139 @@ function lines(){
         L.push(['n', `另有 ${chart.asp.length - 8} 条容许度更松的相位未列。`
                    + '按由紧到松排，越靠前越要紧。']);
     }
+
+    /* ── 八 · 感情 ──────────────────────────────────────
+       走的是通行的老路子：金星看被什么吸引、火星看怎么使劲、
+       七宫与七宫主星看伴侣与从哪儿遇上、月亮看不设防时要什么。
+       没写吉凶断语 —— 「主大富大贵」「必有一劫」那种不是传统里
+       最好的部分，是最坏的部分。 */
+    const src = h => dg(DATA.source[h + 1]);
+    const vb = B['金星'], mb = B['火星'];
+    L.push(['k', '八 · 感 情　【传】']);
+    L.push(['n', '金星看你被什么吸引，火星看你怎么使劲，七宫与七宫主星看'
+               + '伴侣的样子与从哪儿遇上，月亮看不设防的时候要什么。'
+               + '下面每条都是「传统上认为」，说的是倾向，不是判决。']);
+    L.push(['b', `金星 · ${sName('金星')} ${vb.deg.toFixed(1)}° · 第 ${vb.house + 1} 宫`,
+            dg(DATA.venus[sName('金星')]) + `。落在${DATA.houses[vb.house].n}，`
+            + `所以这份喜好多半绕着「${key(DATA.houses[vb.house])}」打转。`,
+            ['planet', '金星']]);
+    L.push(['b', `火星 · ${sName('火星')} ${mb.deg.toFixed(1)}° · 第 ${mb.house + 1} 宫`,
+            dg(DATA.mars[sName('火星')]) + `。使劲的地方多在${DATA.houses[mb.house].n}。`,
+            ['planet', '火星']]);
+    {
+      const rb2 = B[chart.h7.ruler];
+      L.push(['b', `七宫头 ${chart.h7.sign}　宫主星 ${chart.h7.ruler}`
+                 + (rb2 ? ` 落第 ${rb2.house + 1} 宫` : ''),
+              `七宫是一对一关系那一宫，宫头落${chart.h7.sign}，`
+              + `其传统主星${chart.h7.ruler}即为七宫主。`
+              + (rb2 ? `它落在第 ${rb2.house + 1} 宫 —— 传统上看「从哪儿遇上」—— `
+                       + src(rb2.house) + '。' : ''),
+              rb2 ? ['planet', chart.h7.ruler] : null]);
+    }
+    L.push(['b', `月亮 · ${sName('月亮')} ${B['月亮'].deg.toFixed(1)}° · 第 ${B['月亮'].house + 1} 宫`,
+            `不设防时要的东西：${key(S[B['月亮'].sign])}。`
+            + `传统上月亮比太阳更能说明亲密关系里的实际相处。`,
+            ['planet', '月亮']]);
+    {
+      const hits = chart.asp
+        .filter(a => a.a === '金星' || a.b === '金星')
+        .map(a => {
+          const other = a.a === '金星' ? a.b : a.a;
+          return { txt: DATA.venusAsp[`${other}|${a.type}`], a };
+        })
+        .filter(x => x.txt);
+      if (hits.length)
+        for (const h of hits)
+          L.push(['b', `金星 ${h.a.type} ${h.a.a === '金星' ? h.a.b : h.a.a}　`
+                     + `容许 ${h.a.orb.toFixed(2)}°　${h.a.moving}`,
+                  h.txt + '。', ['asp', h.a]]);
+      else
+        L.push(['n', '金星与土星、天王星、火星之间没有构成主要相位 —— '
+                   + '传统上这几组是看感情阻碍与吸引的主要着眼处，'
+                   + '没有就是没有，不硬凑。']);
+    }
+
+    /* ── 九 · 事业与钱 ─────────────────────────────────── */
+    L.push(['k', '九 · 事 业 与 钱　【传】']);
+    L.push(['n', '天顶看别人从哪个方向认识你，十宫主星看机会从哪儿来，'
+               + '太阳看想成为什么，土星看必须扛的那部分，二宫看钱。'
+               + '天顶不是「你能干什么」，是「你被当成什么」。']);
+    L.push(['b', `天顶 ${chart.mcSign} ${(chart.mc % 30).toFixed(1)}°`,
+            dg(DATA.mc[chart.mcSign]) + '。',
+            ['planet', '天顶']]);
+    {
+      const rb3 = B[chart.h10.ruler];
+      L.push(['b', `十宫头 ${chart.h10.sign}　宫主星 ${chart.h10.ruler}`
+                 + (rb3 ? ` 落第 ${rb3.house + 1} 宫` : ''),
+              rb3 ? `事业的机会传统上看十宫主落在哪 —— ${src(rb3.house)}。`
+                  : '十宫主星未在盘上。',
+              rb3 ? ['planet', chart.h10.ruler] : null]);
+    }
+    L.push(['b', `太阳 · ${sName('太阳')} · 第 ${B['太阳'].house + 1} 宫（${DATA.houses[B['太阳'].house].n}）`,
+            `想成为什么样的人：${key(S[B['太阳'].sign])}；`
+            + `这件事主要在${DATA.houses[B['太阳'].house].n}那一块展开。`,
+            ['planet', '太阳']]);
+    {
+      const sb = B['土星'], st = dignityOf('土星', sName('土星'));
+      L.push(['b', `土星 · ${sName('土星')} · 第 ${sb.house + 1} 宫　居${st}`,
+              `传统上土星所在的宫是「慢熟、要吃苦、但最后最结实」的那一块 ——`
+              + `这里是${DATA.houses[sb.house].n}。${dg(DATA.dignityRead[st])}。`,
+              ['planet', '土星']]);
+    }
+    {
+      const jb = B['木星'];
+      L.push(['b', `木星 · ${sName('木星')} · 第 ${jb.house + 1} 宫`,
+              `传统上木星所在的宫是相对松、相对有余地的那一块 ——`
+              + `这里是${DATA.houses[jb.house].n}。也容易在这块铺太大。`,
+              ['planet', '木星']]);
+    }
+    {
+      const rb4 = B[chart.h2.ruler];
+      L.push(['b', `二宫头 ${chart.h2.sign}　宫主星 ${chart.h2.ruler}`
+                 + (rb4 ? ` 落第 ${rb4.house + 1} 宫` : ''),
+              rb4 ? `二宫主钱与自有资源。宫主星落第 ${rb4.house + 1} 宫 —— ${src(rb4.house)}。`
+                  : '二宫主星未在盘上。',
+              rb4 ? ['planet', chart.h2.ruler] : null]);
+    }
+
+    /* ── 十 · 时机 ─────────────────────────────────────── */
+    const ymd = d => `${d.getUTCFullYear()} 年 ${d.getUTCMonth() + 1} 月`;
+    const age = d => d.getUTCFullYear() - pick.y;
+    const nowY = chart.now.date.getUTCFullYear();
+    L.push(['k', '十 · 时 机　【算 + 传】']);
+    L.push(['n', '这一节的年份是算出来的：把行星推到它回到出生黄经的那一刻，'
+               + '用平均周期估，再迭代收敛。说法才是传统的。'
+               + '解法是粗扫加二分，误差在千分之一度以内。'
+               + '行星逆行时会来回几次经过本命位置，前后能拖一年 —— '
+               + '那是真实现象，所以下面写的是一段时间，不是一个日子。']);
+    const spell = arr => !arr.length ? '未落在可算范围内'
+      : arr.length === 1 ? ymd(arr[0])
+      : `${ymd(arr[0])} 至 ${ymd(arr[arr.length - 1])}`;
+    const passNote = arr => arr.length > 1
+      ? `　该段内共 ${arr.length} 次经过本命位置 —— 逆行所致，不是笔误。` : '';
+    L.push(['b', `土星回归（第一次）　${spell(chart.saturnReturn[0])}`
+               + (chart.saturnReturn[0].length ? `　那年约 ${age(chart.saturnReturn[0][0])} 岁` : ''),
+            dg(DATA.cycle['土星回归一']) + passNote(chart.saturnReturn[0])]);
+    L.push(['b', `土星回归（第二次）　${spell(chart.saturnReturn[1])}`
+               + (chart.saturnReturn[1].length ? `　那年约 ${age(chart.saturnReturn[1][0])} 岁` : ''),
+            dg(DATA.cycle['土星回归二']) + passNote(chart.saturnReturn[1])]);
+    {
+      const flat = chart.jupiterReturns.filter(a => a.length);
+      const next = flat.find(a => a[0].getUTCFullYear() >= nowY) || flat[flat.length - 1];
+      L.push(['b', `木星回归　下一次 ${spell(next)}　那年约 ${age(next[0])} 岁`,
+              dg(DATA.cycle['木星回归']) + passNote(next)
+              + `　历次在 ${flat.map(a => a[0].getUTCFullYear()).join('、')} 年。`]);
+    }
+    for (const t of chart.transit)
+      L.push(['b', `今日行运　${t.n}在${t.sign} ${(t.lon % 30).toFixed(1)}°　`
+                 + `走到你的第 ${t.house + 1} 宫（${DATA.houses[t.house].n}）`,
+              DATA.transitHouse[t.n]
+              + `此刻落在${DATA.houses[t.house].n}，`
+              + `也就是「${key(DATA.houses[t.house])}」那一块。`]);
+    L.push(['n', `行运位置按 ${chart.now.date.getUTCFullYear()} 年 `
+               + `${chart.now.date.getUTCMonth() + 1} 月 ${chart.now.date.getUTCDate()} 日算，`
+               + '每次打开这一页都会重算。只列木星与土星 —— '
+               + '快的行星一年跑好几圈，说了等于没说。']);
   } else {
     L.push(['h', '中 式 盘 · 七 政 四 余']);
     L.push(['n', '同一批行星，换一套坐标：西洋按黄道分十二宫（等分 30 度），'
@@ -704,11 +859,10 @@ function closePanel(){
 /* ── 装配 ───────────────────────────────────── */
 export function mount(){
   const sel = $('bcity');
-  PLACES.forEach(([n, anchor], i) => {
+  PLACES.forEach((pl, i) => {
     const o = document.createElement('option');
     o.value = i;
-    // 参照点直接写进选项里。省是面不是点，用的是哪个点得让人看见。
-    o.textContent = n === anchor ? n : `${n} · ${anchor}`;
+    o.textContent = placeLabel(pl);   // 参照点写进选项，用的是哪个点得让人看见
     sel.appendChild(o);
   });
   sel.value = PLACES.length - 1;                     // 默认德国
@@ -749,6 +903,8 @@ export function mount(){
   $('back').addEventListener('click', closePanel);
   addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
+  $('plain').textContent = plain ? '说 人 话' : '术 语';
+  $('plain').classList.toggle('on', plain);
   $('plain').addEventListener('click', () => {
     plain = !plain;
     $('plain').textContent = plain ? '说 人 话' : '术 语';

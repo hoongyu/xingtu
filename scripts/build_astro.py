@@ -195,6 +195,8 @@ WEST_LORE = {
 from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
                            XIU_ZHAN, ELEM_READ, MODE_READ,
                            DIGNITY, DIGNITY_READ, JIEQI, MOON_PHASE)
+from astro_life import (VENUS_SIGN, MARS_SIGN, MC_SIGN, HOUSE_SOURCE,
+                        VENUS_ASPECT, CYCLE_READ, TRANSIT_HOUSE)
 
 
 def mansions():
@@ -236,6 +238,15 @@ def build():
         'dignityRead': {k: {'t': v[0], 'p': v[1]} for k, v in DIGNITY_READ.items()},
         'jieqi': JIEQI,
         'phase': MOON_PHASE,
+        # 落到生活上的那几层。键名用中文，跟盘上的名字一一对上，
+        # 省掉一层翻译，出错时也一眼看得出是哪条。
+        'venus': {k: {'t': v[0], 'p': v[1]} for k, v in VENUS_SIGN.items()},
+        'mars': {k: {'t': v[0], 'p': v[1]} for k, v in MARS_SIGN.items()},
+        'mc': {k: {'t': v[0], 'p': v[1]} for k, v in MC_SIGN.items()},
+        'source': {k: {'t': v[0], 'p': v[1]} for k, v in HOUSE_SOURCE.items()},
+        'venusAsp': {f'{k[0]}|{k[1]}': v for k, v in VENUS_ASPECT.items()},
+        'cycle': {k: {'t': v[0], 'p': v[1]} for k, v in CYCLE_READ.items()},
+        'transitHouse': TRANSIT_HOUSE,
         'aspects': [{'n': n, 'a': a, 'orb': o, 'k': k, 't': t, 'p': p}
                     for n, a, o, k, t, p in ASPECTS],
         'ci': [{'n': n, 'fen': f, 'xiu': x} for n, f, x in CI],
