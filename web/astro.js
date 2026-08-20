@@ -821,7 +821,12 @@ async function runReading(){
   const box = $('read');
   const my = ++revealToken;
   box.innerHTML = '';
-  for (const [kind, a, b, tap] of lines()){
+  const L = lines();
+  /* 节奏按总条数分摊。原来是每条固定 140ms —— 那时报告只有二十几条，
+     三秒出完。补上感情、事业、时机之后涨到八十条，同样的节奏要拖十几秒，
+     等成了折磨。改成总时长封顶约六秒，条数越多每条越快。 */
+  const step = Math.max(35, Math.min(140, 6000 / L.length));
+  for (const [kind, a, b, tap] of L){
     if (my !== revealToken) return;              // 已被新的一轮顶掉
     const row = document.createElement('div');
     row.className = 'rl ' + kind + (tap ? ' tapable' : '');
@@ -836,7 +841,7 @@ async function runReading(){
     // 那样整栏会永远停在 opacity 0，切回来是一片空白。
     void row.offsetWidth;
     row.classList.add('in');
-    await wait(kind === 'h' ? 300 : kind === 'k' ? 220 : 140);
+    await wait(kind === 'h' ? step * 2.2 : kind === 'k' ? step * 1.6 : step);
   }
 }
 
