@@ -1,0 +1,63 @@
+# 产物与源是否同步。不部署 —— 部署由 Cloudflare Pages 的 Git 集成接管。
+#
+# 为什么留着这个 workflow：
+# 仓库里有两样东西是「生成出来再提交进去」的 —— web/astrodata.json 和
+# 各页面里的资源指纹。改了源忘了重新生成，git 不会有任何意见，
+# 线上会安静地跑旧的。这两条就是拿来挡这个的。
+#
+# 老实说一句它的边界：Cloudflare 收到 push 就构建，不等这里的结果。
+# 所以这是「事后报警」，不是「事前拦截」。真要拦，得走 PR + 分支保护，
+# 把这个 workflow 设成必需检查。现在一个人写，报警够用。
+
+name: 产物同步检查
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'scripts/**'
+      - '.github/workflows/check.yml'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # 做法都是重跑一遍生成器再看 git diff：有 diff 就说明产物落后于源。
+      # 生成器都是纯 Python 无依赖，且已验证幂等。
+      - name: 核对 astrodata.json 与 scripts/ 同步
+        run: |
+          python scripts/build_astro.py
+          if ! git diff --quiet web/astrodata.json; then
+            echo "::error::astrodata.json 落后于 scripts/。本地跑 python scripts/build_astro.py 后重新提交"
+            git diff --stat web/astrodata.json
+            exit 1
+          fi
+
+      # 指纹漏打是最阴的一种：_headers 给 .js/.css 设了一年 immutable，
+      # 漏掉的那个文件会被浏览器永久缓存住，线上改不动，而且没有任何报错。
+      #
+      # 这条闸门加上去第一次跑就抓到了真问题：digest() 当时直接哈希原始字节，
+      # Windows 检出是 CRLF、CI 是 LF，同一份内容算出两个指纹。已修。
+      - name: 核对资源指纹已打全
+        run: |
+          python scripts/stamp.py --base https://xingtu-71f.pages.dev
+          if ! git diff --quiet web/; then
+            echo "::error::指纹没打全。本地跑 python scripts/stamp.py --base https://xingtu-71f.pages.dev 后重新提交"
+            git diff --stat web/
+            exit 1
+          fi
