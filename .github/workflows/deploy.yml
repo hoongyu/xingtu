@@ -28,6 +28,9 @@ concurrency:
 
 permissions:
   contents: read
+  # 官方示例里带的。给了它，部署状态会挂到 commit 上，
+  # 仓库首页那行提交后面直接看得见部署成没成，不用点进 Actions。
+  deployments: write
 
 jobs:
   deploy:
@@ -72,3 +75,4 @@ jobs:
           # 要升的时候改这一行，顺手在本地跑一次同版本确认没问题。
           wranglerVersion: '4.125.0'
           command: pages deploy web --project-name xingtu --branch main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
