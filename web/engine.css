@@ -1,0 +1,315 @@
+:root{
+  --void:#0a0d14;
+  --void-deep:#05070c;
+  --ink:#e8e2d4;
+  --ink-dim:rgba(232,226,212,.42);
+  --ink-faint:rgba(232,226,212,.16);
+  --zhu:#c9503f;
+  --gold:#d9b45f;
+  --song:"Songti SC","SimSun","Noto Serif CJK SC",serif;
+  --hei:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --ease:cubic-bezier(.22,.92,.24,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--void-deep);color:var(--ink);font-family:var(--hei);
+  background-image:radial-gradient(ellipse at 50% 45%,#111726 0%,#05070c 72%);
+}
+#sky{display:block;width:100vw;height:100vh;cursor:grab}
+#sky.zoomed{cursor:default}
+
+/* ── 星点 ───────────────────────────────────────── */
+.star{fill:var(--ink);transition:fill .5s ease}
+.star.twinkle{animation:tw var(--dur) ease-in-out infinite;animation-delay:var(--del)}
+@keyframes tw{
+  0%,100%{opacity:var(--o)}
+  50%    {opacity:calc(var(--o) * .38)}
+}
+.hit{fill:transparent;cursor:pointer}
+
+/* ── 连线：三种状态 ─────────────────────────────
+   静默（有讲解的星官常驻一道极淡轮廓，各自错相位缓慢呼吸）、
+   悬停（整组亮起并加快闪动）、点开（逐段生长）。
+   dashoffset 默认 0：只有要播生长动画时才由 .armed 拉回起点，
+   否则轮廓被 dash 遮掉，全天图上什么都看不见。
+   下面三条的先后顺序就是优先级，别调换。 */
+.link{
+  fill:none;stroke:var(--gold);stroke-width:.9;stroke-linecap:round;
+  stroke-linejoin:round;opacity:0;
+  stroke-dasharray:var(--len);stroke-dashoffset:0;
+}
+.link.lore{
+  opacity:var(--rest);
+  animation-name:breathe;animation-duration:var(--bdur);
+  animation-timing-function:ease-in-out;animation-delay:var(--bdel);
+  animation-iteration-count:infinite;
+}
+@keyframes breathe{
+  0%,100%{opacity:calc(var(--rest) * .42)}
+  50%    {opacity:var(--rest)}
+}
+.link.lit{
+  stroke-width:1.25;
+  animation-name:pulse;animation-duration:1.05s;animation-delay:0s;
+  animation-timing-function:ease-in-out;animation-iteration-count:infinite;
+}
+@keyframes pulse{
+  0%,100%{opacity:.38}
+  50%    {opacity:.95}
+}
+.link.armed{stroke-dashoffset:var(--len);animation-name:none}
+.link.draw{
+  opacity:.85;animation-name:none;
+  transition:stroke-dashoffset var(--grow) var(--ease) var(--wait),opacity .3s ease var(--wait);
+  stroke-dashoffset:0;
+}
+/* 悬停命中：一条透明粗线盖住整组折线，比逐点找近星可靠得多 */
+.linkhit{
+  fill:none;stroke:transparent;stroke-width:11;pointer-events:stroke;cursor:pointer;
+  stroke-linecap:round;stroke-linejoin:round;   /* 默认 butt 端帽会漏掉折线首尾那一点 */
+}
+
+/* 星官被选中时，成员星点亮 */
+.star.member{fill:var(--gold)}
+.star.dimmed{opacity:.16 !important;animation:none}   /* 要能被看见并点中，才谈得上「点旁边的星跳过去」 */
+.link.other{opacity:0 !important}
+
+/* ── 星座插画 ───────────────────────────────────
+   插画自带三颗锚星的像素坐标，三对「像素↔星位」定一个仿射变换，
+   所以它跟星点的咬合是算出来的，不是摆出来的。
+   高斯模糊走天球单位，于是越放大光晕越柔。*/
+.fig{opacity:0;transition:opacity .9s var(--ease);pointer-events:none}
+.fig.on{opacity:1}
+
+/* ── 规（恒显圈 / 赤道 / 外规）─────────────────── */
+.gui{fill:none;stroke:var(--ink-faint);stroke-width:.6}
+.gui.equator{stroke:rgba(217,180,95,.22);stroke-dasharray:3 5}
+.gui.horizon{stroke:rgba(201,80,63,.34);stroke-width:.9}
+.gui-label{
+  font-family:var(--song);font-size:8px;fill:var(--ink-dim);
+  letter-spacing:.16em;
+}
+
+/* ── 星官名 ─────────────────────────────────────── */
+.gname{
+  font-family:var(--song);fill:var(--ink);opacity:0;pointer-events:none;
+  transition:opacity .55s ease;letter-spacing:.14em;
+}
+.gname.lit{opacity:.85}
+/* 只有显出来的名字才接收鼠标，否则会被满屏不可见的文字误触 */
+.gname.show{opacity:.92;pointer-events:auto;cursor:help}
+
+/* ── 讲解面板 ───────────────────────────────────── */
+#panel{
+  position:fixed;left:0;right:0;bottom:0;padding:26px 30px 30px;
+  background:linear-gradient(to top,rgba(5,7,12,.97) 55%,transparent);
+  transform:translateY(101%);transition:transform .68s var(--ease);
+  pointer-events:none;
+}
+#panel.show{transform:translateY(0);pointer-events:auto}
+#panel .top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+#panel h2{font-family:var(--song);font-size:30px;font-weight:400;letter-spacing:.2em}
+#panel .py{font-size:11px;color:var(--ink-dim);letter-spacing:.24em}
+#panel .en{font-size:12px;color:var(--ink-dim);font-style:italic}
+#panel .facts{display:flex;gap:22px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-dim);margin-bottom:14px}
+#panel .facts b{color:var(--gold);font-weight:500;font-variant-numeric:tabular-nums}
+#panel p{font-size:14px;line-height:2;max-width:62ch;color:rgba(232,226,212,.86)}
+#panel .todo{color:var(--ink-dim);font-style:italic}
+#close{
+  position:absolute;right:30px;top:26px;font-family:var(--song);font-size:12px;
+  letter-spacing:.28em;color:var(--zhu);cursor:pointer;
+  transition:transform .35s var(--ease)
+}
+#close:hover{transform:scale(1.12)}
+
+/* ── 后退键 ─────────────────────────────────────
+   右上角那个「关」太轻，点进去之后需要一个一眼看得见的出口。
+   位置跟着检索栏收放走，不然会被压在栏底下。 */
+#back{
+  position:fixed;top:72px;left:32px;z-index:32;
+  font-family:var(--song);font-size:13px;letter-spacing:.2em;
+  color:var(--gold);background:rgba(5,7,12,.92);
+  border:1px solid rgba(217,180,95,.42);padding:9px 17px;cursor:pointer;
+  opacity:0;transform:translateX(-14px);pointer-events:none;
+  transition:opacity .42s var(--ease),transform .42s var(--ease),
+             background .25s ease,color .25s ease,left .5s var(--ease);
+}
+body:not(.rail-off) #back{left:244px}
+body.open #back{opacity:1;transform:translateX(0);pointer-events:auto}
+#back:hover{background:var(--gold);color:var(--void);border-color:var(--gold)}
+
+/* ── 单星悬停卡 ─────────────────────────────────── */
+#tip{
+  position:fixed;z-index:40;pointer-events:none;opacity:0;
+  transform:translate(-50%,-136%);transition:opacity .16s ease;
+  background:rgba(10,13,20,.95);border:1px solid rgba(232,226,212,.14);
+  padding:10px 14px;font-size:11px;line-height:1.9;min-width:150px;
+  box-shadow:0 12px 40px rgba(0,0,0,.6);
+}
+#tip.on{opacity:1}
+#tip .nm{font-family:var(--song);font-size:15px;letter-spacing:.1em;margin-bottom:5px}
+#tip .k{color:var(--ink-dim);letter-spacing:.08em}
+#tip .v{float:right;margin-left:20px;font-variant-numeric:tabular-nums;color:var(--gold)}
+#tip .warn{color:var(--zhu);margin-top:5px;font-size:10.5px;letter-spacing:.06em}
+#tip .note{color:rgba(232,226,212,.72);margin-top:8px;font-size:11.5px;
+  line-height:1.8;max-width:250px;letter-spacing:.02em;
+  border-top:1px solid rgba(232,226,212,.1);padding-top:7px}
+
+/* ── 星官悬停卡：名字 + 一句来历 + 缩略图 ────────── */
+#card{
+  position:fixed;z-index:45;pointer-events:none;opacity:0;
+  transform:translate(-50%,-116%);transition:opacity .18s ease;
+  background:rgba(10,13,20,.96);border:1px solid rgba(217,180,95,.24);
+  padding:13px 16px 14px;width:296px;
+  box-shadow:0 14px 46px rgba(0,0,0,.66);
+}
+#card.on{opacity:1}
+#card .hd{display:flex;align-items:center;gap:12px;margin-bottom:9px}
+#card .mini{flex:none;width:54px;height:54px}
+#card .mini path{fill:none;stroke:var(--gold);stroke-width:1.3;opacity:.9;
+  stroke-linecap:round;stroke-linejoin:round}
+#card .mini circle{fill:var(--ink)}
+#card .cn{font-family:var(--song);font-size:18px;letter-spacing:.12em;line-height:1.3}
+#card .ce{font-size:10px;color:var(--ink-dim);letter-spacing:.12em;margin-top:4px}
+#card .cb{font-size:12px;line-height:1.9;color:rgba(232,226,212,.82)}
+#card .cb.todo{color:var(--ink-dim);font-style:italic}
+
+/* ── 左侧检索栏 ─────────────────────────────────── */
+#rail{
+  position:fixed;left:0;top:0;bottom:0;width:212px;z-index:30;
+  background:linear-gradient(to right,rgba(5,7,12,.94) 68%,rgba(5,7,12,0));
+  padding:74px 16px 22px;overflow-y:auto;overscroll-behavior:contain;
+  transition:transform .5s var(--ease);
+  scrollbar-width:thin;scrollbar-color:rgba(232,226,212,.16) transparent;
+}
+#rail::-webkit-scrollbar{width:5px}
+#rail::-webkit-scrollbar-thumb{background:rgba(232,226,212,.16)}
+body.rail-off #rail{transform:translateX(-100%)}
+#railtoggle{
+  position:fixed;left:0;top:50%;z-index:31;transform:translateY(-50%);
+  writing-mode:vertical-rl;font-family:var(--song);font-size:12px;
+  letter-spacing:.34em;color:var(--ink-dim);background:rgba(5,7,12,.9);
+  border:1px solid var(--ink-faint);border-left:none;padding:14px 5px;
+  cursor:pointer;transition:color .3s ease,left .5s var(--ease);
+}
+#railtoggle:hover{color:var(--gold)}
+body:not(.rail-off) #railtoggle{left:212px}
+
+#q{
+  width:100%;background:rgba(232,226,212,.05);border:1px solid var(--ink-faint);
+  color:var(--ink);font-family:var(--hei);font-size:12.5px;padding:8px 10px;
+  letter-spacing:.06em;outline:none;transition:border-color .3s ease;
+}
+#q:focus{border-color:rgba(217,180,95,.5)}
+#q::placeholder{color:rgba(232,226,212,.28)}
+
+.railsec{margin-top:20px}
+.railsec h3{
+  font-family:var(--song);font-size:11.5px;font-weight:400;letter-spacing:.3em;
+  color:var(--ink-dim);margin-bottom:9px;
+}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{
+  font-family:var(--song);font-size:12px;letter-spacing:.06em;
+  color:rgba(232,226,212,.74);background:rgba(232,226,212,.05);
+  border:1px solid transparent;padding:4px 8px;cursor:pointer;
+  transition:color .22s ease,background .22s ease,border-color .22s ease;
+}
+.chip:hover{color:var(--void);background:var(--gold);border-color:var(--gold)}
+.chip.cur{color:var(--gold);border-color:rgba(217,180,95,.45)}
+
+#hits{margin-top:12px}
+#hits .hit-row{
+  display:flex;align-items:baseline;gap:8px;padding:6px 8px;cursor:pointer;
+  border-left:2px solid transparent;transition:background .2s ease,border-color .2s ease;
+}
+#hits .hit-row:hover,#hits .hit-row.sel{background:rgba(232,226,212,.07);border-left-color:var(--gold)}
+#hits .hn{font-family:var(--song);font-size:13.5px;letter-spacing:.06em}
+#hits .hm{font-size:10px;color:var(--ink-dim);letter-spacing:.1em;margin-left:auto}
+#hits .hw{font-size:10.5px;color:var(--ink-dim)}
+#hits .none{font-size:11.5px;color:var(--ink-dim);padding:8px;font-style:italic}
+
+/* ── 页间导航 ───────────────────────────────────── */
+#nav{display:flex;gap:2px;margin-left:4px}
+#nav a{
+  font-family:var(--song);font-size:12px;letter-spacing:.2em;
+  color:var(--ink-dim);text-decoration:none;padding:5px 11px;
+  border:1px solid transparent;transition:color .3s ease,border-color .3s ease;
+}
+#nav a:hover{color:var(--gold)}
+#nav a.cur{color:var(--ink);border-color:var(--ink-faint)}
+
+/* ── 来源面板 ───────────────────────────────────
+   不是装饰。Free Art License 第 2.2 条要求分发时署名并指明原件出处，
+   CC BY / CC BY-SA 同样要求署名。这一层是履行义务的地方，别删。 */
+#srcbtn{
+  font-family:var(--song);font-size:11px;letter-spacing:.24em;
+  color:var(--ink-dim);cursor:pointer;padding:5px 9px;
+  border:1px solid transparent;transition:color .3s ease,border-color .3s ease;
+}
+#srcbtn:hover{color:var(--gold);border-color:rgba(217,180,95,.35)}
+#src{
+  position:fixed;inset:0;z-index:60;display:flex;align-items:center;
+  justify-content:center;background:rgba(3,5,9,.82);
+  opacity:0;pointer-events:none;transition:opacity .35s var(--ease);
+}
+#src.on{opacity:1;pointer-events:auto}
+#src .box{
+  background:#080b12;border:1px solid rgba(232,226,212,.14);
+  max-width:640px;max-height:82vh;overflow-y:auto;padding:34px 38px 30px;
+  transform:translateY(14px);transition:transform .35s var(--ease);
+  box-shadow:0 30px 90px rgba(0,0,0,.7);
+}
+#src.on .box{transform:translateY(0)}
+#src h3{
+  font-family:var(--song);font-size:17px;font-weight:400;letter-spacing:.28em;
+  margin-bottom:18px;color:var(--ink);
+}
+#src h4{
+  font-family:var(--song);font-size:12.5px;font-weight:400;letter-spacing:.2em;
+  color:var(--gold);margin:18px 0 6px;
+}
+#src p{font-size:12.5px;line-height:1.95;color:rgba(232,226,212,.78);margin-bottom:8px}
+#src a{color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(217,180,95,.3)}
+#src a:hover{border-bottom-color:var(--gold)}
+#src .fine{font-size:11.5px;color:var(--ink-dim);line-height:1.9;margin-top:16px}
+#srcclose{
+  position:absolute;right:26px;top:22px;font-family:var(--song);font-size:12px;
+  letter-spacing:.28em;color:var(--zhu);cursor:pointer;
+}
+
+/* ── 顶部控制 ───────────────────────────────────── */
+#bar{
+  position:fixed;top:0;left:0;right:0;padding:22px 30px;display:flex;
+  transition:padding-left .5s var(--ease);
+  align-items:center;gap:26px;pointer-events:none;
+}
+#bar>*{pointer-events:auto}
+#title{font-family:var(--song);font-size:17px;letter-spacing:.4em}
+.seg{display:flex;border:1px solid var(--ink-faint)}
+.seg button{
+  background:none;border:none;color:var(--ink-dim);font-family:var(--song);
+  font-size:12px;letter-spacing:.2em;padding:6px 15px;cursor:pointer;
+  transition:color .3s ease,background .3s ease;
+}
+.seg button.on{color:var(--void);background:var(--ink)}
+#where{
+  margin-left:auto;font-size:11px;color:var(--ink-dim);letter-spacing:.1em;
+  display:flex;align-items:center;gap:10px;
+}
+#where select{
+  background:none;border:1px solid var(--ink-faint);color:var(--ink);
+  font-family:var(--hei);font-size:11px;padding:5px 8px;cursor:pointer;
+}
+#where select option{background:#0a0d14}
+#hint{
+  position:fixed;left:0;right:0;bottom:26px;text-align:center;
+  font-family:var(--song);font-size:11px;letter-spacing:.36em;color:var(--ink-faint);
+  transition:opacity .4s ease;pointer-events:none;
+}
+body:not(.rail-off) #bar{padding-left:240px}
+body:not(.rail-off) #panel{padding-left:242px}
+body:not(.rail-off) #hint{padding-left:212px}
+#panel,#hint{transition:padding-left .5s var(--ease)}
+body.open #hint{opacity:0}

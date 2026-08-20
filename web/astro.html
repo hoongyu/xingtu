@@ -1,0 +1,94 @@
+<meta charset="utf-8">
+<html lang="zh-Hans">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="真算的星盘：行星位置由历表计算，解读附术语与说人话两版。西洋按黄道十二宫，中式按赤道二十八宿——同一批行星，两套坐标。">
+<meta name="theme-color" content="#05070c">
+<meta property="og:title" content="星盘 · 西洋十二宫与中式二十八宿">
+<meta property="og:description" content="行星位置真算，解读分术语与说人话两版。出生数据只在浏览器里算，不上传。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="card.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>星盘 · 西洋十二宫与中式二十八宿</title>
+<link rel="stylesheet" href="engine.css?v=366a97f1">
+<link rel="stylesheet" href="astro.css?v=b0902ed6">
+
+<div id="bar">
+  <div id="title">星 盤</div>
+  <div id="nav"><a href="index.html">星 圖</a><a href="concept.html">概 念</a><a href="astro.html" class="cur">星 盤</a></div>
+  <div class="seg">
+    <button data-m="west" class="on">西洋盤</button>
+    <button data-m="east">中式盤</button>
+  </div>
+  <div id="plain">术 语</div>
+  <div id="where">
+    <span id="stamp"></span>
+    <div id="srcbtn">來 源</div>
+  </div>
+</div>
+
+<aside id="rail">
+  <div class="railsec">
+    <h3>出 生 数 据</h3>
+    <div class="form">
+      <label>年 <input id="by" type="number" min="1800" max="2050"></label>
+      <label>月 <input id="bm" type="number" min="1" max="12"></label>
+      <label>日 <input id="bd" type="number" min="1" max="31"></label>
+      <label>时 <input id="bh" type="number" min="0" max="23"></label>
+      <label>分 <input id="bmin" type="number" min="0" max="59"></label>
+      <label class="wide">地点 <select id="bcity"></select></label>
+      <label class="ck"><input id="bdst" type="checkbox"> 出生时行夏令时</label>
+      <label class="wide">宫位制
+        <select id="hsys">
+          <option value="whole">整宫制</option>
+          <option value="equal">等宫制</option>
+          <option value="porphyry">波菲利制</option>
+        </select>
+      </label>
+      <button id="cast">排 盘</button>
+    </div>
+    <p class="privacy">出生数据只在这台机器上计算，不发往任何服务器。</p>
+  </div>
+  <div id="secs"></div>
+</aside>
+<div id="railtoggle">目 录</div>
+
+<div id="back">← 收 起</div>
+<div id="src"><div class="box"><div id="srcclose">关</div>
+<h3>來 源 與 授 權</h3>
+<div id="srcbody">
+<h4>这一页的立场</h4>
+<p><b>行星位置是真算的。</b>用 JPL 公布的行星近似轨道根数与 Meeus《天文算法》的
+日月级数，1800–2050 年适用。校验方式是拿它去对三次日全食与两次月全食：
+日食时日月黄经相差 0.04–0.06 度，月食时相差 179.96–180.00 度。这部分是天文。</p>
+<p><b>怎么解读那个位置，是传统的说法。</b>占星有两千多年历史，
+是一套完整的文化系统，但它不是预测科学。这一页把它当文化来讲 ——
+词条写的是「传统上认为」，不是「事实上会」。两者在界面上分开标注。</p>
+
+<h4>算法与数据</h4>
+<p>行星：<a href="https://ssd.jpl.nasa.gov/planets/approx_pos.html" target="_blank" rel="noopener">JPL
+Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical Algorithms》。
+二十八宿的宿度由距星实测赤经算出，星表来自
+<a href="https://doi.org/10.12149/100877" target="_blank" rel="noopener">NADC 中国古天文基础参考星表</a>（CC BY 4.0）。</p>
+
+<h4>宫位制</h4>
+<p>提供整宫制、等宫制、波菲利制三种。普拉西德制流行，
+但它在高纬度会失效，算法也容易出错 —— 与其给一个可能算错的，不如不给。</p>
+
+<h4>隐私</h4>
+<p>出生日期、时间、地点全部在浏览器里计算，不上传、不记录。
+地点用内置的城市经纬度表，不调用任何地理编码服务。</p>
+</div></div></div>
+
+<svg id="wheel"></svg>
+<div id="card"></div>
+
+<div id="panel">
+  <div id="close">关</div>
+  <div class="top"><h2 id="pn"></h2><span class="py" id="pp"></span></div>
+  <p id="pt"></p>
+</div>
+
+<script type="module">
+import { mount } from './astro.js?v=26c7576f';
+mount();
+</script>

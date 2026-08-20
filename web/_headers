@@ -1,0 +1,17 @@
+# Cloudflare Pages / Netlify 都认这个文件。
+# 带内容指纹的资源可以长缓存；HTML 与数据必须每次核对，
+# 否则改了内容用户还看旧版 —— 开发时踩过这个坑。
+
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+/art/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+/*.json
+  Cache-Control: public, max-age=0, must-revalidate
+/
+  Cache-Control: public, max-age=0, must-revalidate

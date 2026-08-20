@@ -1,0 +1,49 @@
+<meta charset="utf-8">
+<html lang="zh-Hans">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="三百零八个中国星官、八十八个西方星座，同一片星空的两种读法。每一官每一座都附考据过的来历，可按观测地筛选。">
+<meta name="theme-color" content="#05070c">
+<meta property="og:title" content="星图 · 中国星官与西方星座">
+<meta property="og:description" content="三百零八个中国星官、八十八个西方星座，同一片星空的两种读法。每一官每一座都附考据过的来历，可按观测地筛选。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="card.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>星图 · 中国星官</title>
+<link rel="stylesheet" href="engine.css?v=366a97f1">
+<div id="bar">
+  <div id="title">星 图</div>
+  <div id="nav"><a href="index.html" class="cur">星 圖</a><a href="concept.html">概 念</a><a href="astro.html">星 盤</a></div>
+  <div class="seg"></div>
+  <div id="where">
+    <span id="lost"></span>
+    <div id="srcbtn">來 源</div>
+    <select id="site"></select>
+  </div>
+</div>
+
+<aside id="rail">
+  <input id="q" type="search" placeholder="搜星官、星座、星名…" autocomplete="off" spellcheck="false">
+  <div id="hits"></div>
+  <div id="secs"></div>
+</aside>
+<div id="railtoggle">检 索</div>
+
+<div id="back"></div>
+<div id="src"><div class="box"><div id="srcclose">关</div><h3>來 源 與 授 權</h3><div id="srcbody"></div></div></div>
+<svg id="sky"></svg>
+<div id="tip"></div>
+<div id="card"></div>
+<div id="hint">点 一 颗 星 官</div>
+
+<div id="panel">
+  <div id="close">关</div>
+  <div class="top"><h2 id="pn"></h2><span class="py" id="pp"></span><span class="en" id="pe"></span></div>
+  <div class="facts" id="pf"></div>
+  <p id="pt"></p>
+</div>
+
+<script type="module">
+import { mount } from './engine.js?v=367ce2db';
+import { CFG } from './sky.config.js?v=8e902466';
+mount(CFG);
+</script>
