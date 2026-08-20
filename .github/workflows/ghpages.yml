@@ -1,0 +1,58 @@
+# 同一份 web/ 再发一份到 GitHub Pages。
+#
+# 为什么要第二个落点：微信内置浏览器把整个 *.pages.dev 拦掉了 ——
+# 拦截文案自己说的是「该网页所属平台可能存在被他人恶意利用」，
+# 判定发生在域名层，跟本站内容无关（连最无害的 /concept 都拦）。
+# 免费方案全是共享域名，换一个只是换个池子，但 GitHub Pages
+# 是另一套信誉池，值得试。Cloudflare 那份不动，两边并存。
+#
+# 注意两处差异，别指望两个落点行为一致：
+#   1. GitHub Pages 没有 _headers，缓存策略是它自己那套；
+#      资源指纹照样有效，只是 immutable 那条不生效。
+#   2. 没有 clean URL，访问要带 .html。站内导航本来就写的 .html，
+#      所以点得通；但 /astro 这种手输的地址在这边是 404。
+
+name: 发一份到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'scripts/**'
+      - '.github/workflows/ghpages.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ghpages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # og:image 必须是绝对地址，而仓库里存的那份指向 Cloudflare。
+      # 这里就地改成本落点的地址再上传，不提交回仓库 ——
+      # 一份源、两个落点，各自的绝对地址在各自的构建里生成。
+      - name: og:image 改指向本落点
+        run: python scripts/stamp.py --base https://hoongyu.github.io/xingtu
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v5
