@@ -11,7 +11,7 @@
  * 出生数据只在浏览器里算，不发往任何服务器。
  */
 import { compute, houses, houseOf, aspects } from './ephem.js?v=8c8e7925';
-import { PLACES, label as placeLabel } from './places.js?v=fc19c9d0';
+import { PLACES, label as placeLabel } from './places.js?v=3deca637';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
@@ -108,6 +108,9 @@ function cast(){
 
   const c = compute(pick.y, pick.m, pick.d, hh + mm / 60, tz + dst, lat, lon);
   c.city = pname; c.anchor = anchor; c.lat = lat; c.lon = lon;
+  // 顶栏那个戳要带上参照点：同一个省现在可能有两条（太原／大同、
+  // 南京／扬州），只写省名的话看不出算的是哪一个。
+  c.label = placeLabel(PLACES[ci]);
   c.cusp = houses(hsys, c.asc, c.mc);
   const names = DATA.planets.map(p => p.n)
     .filter(n => n !== '上升' && n !== '天顶' && n !== '南交点');
@@ -231,7 +234,7 @@ function cast(){
   draw();
   $('stamp').textContent =
     `${pick.y}-${String(pick.m).padStart(2,'0')}-${String(pick.d).padStart(2,'0')} `
-    + `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} · ${c.city}`;
+    + `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} · ${c.label}`;
   runReading();
 }
 

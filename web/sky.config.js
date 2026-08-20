@@ -4,7 +4,7 @@
  * 画几道参考圈、悬停显示什么、面板统计什么。引擎不认「星等」也不认
  * 「赤纬」，那些语义全在这里。
  */
-import { BY_LAT, label } from './places.js?v=fc19c9d0';
+import { BY_LAT, label } from './places.js?v=3deca637';
 
 const R = 380;                     // 图面半径，引擎也用它
 const rad = d => d * Math.PI / 180;
