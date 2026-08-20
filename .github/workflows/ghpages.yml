@@ -44,12 +44,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      # og:image 必须是绝对地址，而仓库里存的那份指向 Cloudflare。
-      # 这里就地改成本落点的地址再上传，不提交回仓库 ——
-      # 一份源、两个落点，各自的绝对地址在各自的构建里生成。
-      - name: og:image 改指向本落点
-        run: python scripts/stamp.py --base https://hoongyu.github.io/xingtu
-
+      # 曾经这里要就地改写 og:image —— 那时仓库里存的绝对地址指向
+      # Cloudflare，一份源发两个落点。Cloudflare 那份已经删了，
+      # 仓库里存的就是本落点的地址，不必再改。留 setup-python 是因为
+      # 下面没有构建步骤，但保持环境一致，将来加回来不用重新想。
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -55,9 +55,9 @@ jobs:
       # Windows 检出是 CRLF、CI 是 LF，同一份内容算出两个指纹。已修。
       - name: 核对资源指纹已打全
         run: |
-          python scripts/stamp.py --base https://xingtu-71f.pages.dev
+          python scripts/stamp.py --base https://hoongyu.github.io/xingtu
           if ! git diff --quiet web/; then
-            echo "::error::指纹没打全。本地跑 python scripts/stamp.py --base https://xingtu-71f.pages.dev 后重新提交"
+            echo "::error::指纹没打全。本地跑 python scripts/stamp.py --base https://hoongyu.github.io/xingtu 后重新提交"
             git diff --stat web/
             exit 1
           fi

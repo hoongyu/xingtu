@@ -2,7 +2,7 @@
 
 一套「点 + 折线 + 分组」的探索式渲染引擎，外加两份跑通它的数据集。
 
-线上： <https://xingtu-71f.pages.dev>　（Cloudflare Pages，推 main 自动部署）
+线上： <https://hoongyu.github.io/xingtu/>　（GitHub Pages，推 main 自动部署）
 
 - **星图** —— 中国星官 308 个、西方星座 88 个，同一批星的两种划法
 - **概念星图** —— 「人工智能」拆成 161 个关键词，同一批词的两种划法

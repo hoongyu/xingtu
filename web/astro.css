@@ -272,3 +272,14 @@ body:not(.read-off) #readtoggle{right:330px}
 @media (max-width: 820px){
   .rl.b.tapable{margin:0 -8px 11px;padding:7px 8px}
 }
+
+/* 小注：一节标题底下那句「这一节是怎么来的」。
+   比条目更淡、更小，读的时候可以跳过，想追来路时它在。 */
+.rl.n{
+  font-size:10.5px;line-height:1.85;color:var(--ink-faint);
+  border-left:1px solid rgba(232,226,212,.12);
+  padding-left:10px;margin:-4px 0 12px;
+}
+@media (max-width: 820px){
+  .rl.n{font-size:10.5px;line-height:1.9}
+}

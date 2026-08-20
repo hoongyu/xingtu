@@ -6,11 +6,11 @@
 <meta property="og:title" content="星盘 · 西洋十二宫与中式二十八宿">
 <meta property="og:description" content="行星位置真算，解读分术语与说人话两版。出生数据只在浏览器里算，不上传。">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://xingtu-71f.pages.dev/card.png">
+<meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
 <link rel="stylesheet" href="engine.css?v=00710302">
-<link rel="stylesheet" href="astro.css?v=c4fd7eb4">
+<link rel="stylesheet" href="astro.css?v=ba16e887">
 
 <div id="bar">
   <div id="title">星 盤</div>
@@ -34,7 +34,7 @@
       <div id="dstamp"></div>
       <label>时 <input id="bh" type="number" min="0" max="23"></label>
       <label>分 <input id="bmin" type="number" min="0" max="59"></label>
-      <label class="wide">地点 <select id="bcity"></select></label>
+      <label class="wide">出生地 <select id="bcity"></select></label>
       <label class="ck"><input id="bdst" type="checkbox"> 出生时行夏令时</label>
       <label class="wide">宫位制
         <select id="hsys">
@@ -45,7 +45,7 @@
       </label>
       <button id="cast">排 盘</button>
     </div>
-    <p class="privacy">出生数据只在这台机器上计算，不发往任何服务器。</p>
+    <p class="privacy">省是一个面不是一个点，括号里是实际取用的参照点（省会）。经度差 15 度就是一小时赤经，上升点能挪近一个星座 —— 内蒙古横跨 29 度，新疆更多。<br><br>出生数据只在这台机器上计算，不发往任何服务器。</p>
   </div>
   <div id="secs"></div>
 </aside>
@@ -91,6 +91,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=0969cfe8';
+import { mount } from './astro.js?v=6b1c7eec';
 mount();
 </script>

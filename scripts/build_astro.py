@@ -188,7 +188,8 @@ WEST_LORE = {
 
 
 from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
-                           XIU_ZHAN, ELEM_READ, MODE_READ)
+                           XIU_ZHAN, ELEM_READ, MODE_READ,
+                           DIGNITY, DIGNITY_READ, JIEQI, MOON_PHASE)
 
 
 def mansions():
@@ -226,6 +227,10 @@ def build():
                    for i, (n, t, p) in enumerate(HOUSES)],
         'elem': {k: {'t': v[0], 'p': v[1]} for k, v in ELEM_READ.items()},
         'mode': {k: {'t': v[0], 'p': v[1]} for k, v in MODE_READ.items()},
+        'dignity': DIGNITY,
+        'dignityRead': {k: {'t': v[0], 'p': v[1]} for k, v in DIGNITY_READ.items()},
+        'jieqi': JIEQI,
+        'phase': MOON_PHASE,
         'aspects': [{'n': n, 'a': a, 'orb': o, 'k': k, 't': t, 'p': p}
                     for n, a, o, k, t, p in ASPECTS],
         'ci': [{'n': n, 'fen': f, 'xiu': x} for n, f, x in CI],
