@@ -1,0 +1,14 @@
+# 文本一律以 LF 入库、以 LF 检出。
+# Windows 上默认检出成 CRLF，而 stamp.py 的内容指纹一旦跟换行符挂钩，
+# 本机与 CI 就算不到一起去 —— 这个文件管「磁盘上是什么」，
+# stamp.py 里 digest() 的归一管「就算不是也不影响」，两道各挡一半。
+* text=auto eol=lf
+
+# 二进制别碰
+*.png   binary
+*.webp  binary
+*.jpg   binary
+*.ico   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary

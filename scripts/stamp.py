@@ -18,7 +18,15 @@ ASSETS = ['engine.css', 'engine.js', 'sky.config.js', 'concept.config.js',
 
 
 def digest(name):
-    return hashlib.sha1((W / name).read_bytes()).hexdigest()[:8]
+    # 先把换行归一到 LF 再算。指纹必须是「内容」的函数，
+    # 不能是「在谁的磁盘上」的函数 —— Windows 检出会把 .js/.css 变成 CRLF，
+    # 直接哈希原始字节的话，同一份内容在本机与 CI 上会算出两个指纹，
+    # 永远对不上。归一后的值也正好等于 git 里存的那份的哈希。
+    #
+    # 这是 CI 加了「重跑生成器看 diff」的闸门之后第一次跑就抓出来的：
+    # 本机 engine.css=366a97f1，CI 算的是 4b1f4d19，差的只是回车符。
+    raw = (W / name).read_bytes().replace(b'\r\n', b'\n')
+    return hashlib.sha1(raw).hexdigest()[:8]
 
 
 def main():
