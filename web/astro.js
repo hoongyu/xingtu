@@ -1,11 +1,12 @@
-/* 星盘：排盘与解读。
+/* 星盘：排盘、解析与呈现。
  *
  * 立场写在页面上，这里再说一遍：行星位置是真算的（ephem.js，天文），
  * 怎么解读是传统的说法（astrodata.json，文化）。两者在界面上分开标注。
  *
- * 有意思的结构：同一批行星，西洋按黄道分十二宫（等分 30 度），
- * 中国七政四余按赤道分二十八宿（宿度不等，井宿 32 度、觜宿 1.4 度）。
- * 换一次坐标系，整张盘重排 —— 跟星图那边「同一批星，两种划法」是一回事。
+ * 结构上最有意思的一处：同一批行星，西洋按黄道分十二宫（等分 30 度），
+ * 中国七政四余按赤道分二十八宿（宿度不等，井 32.2 度、觜 1.4 度）。
+ * 换一次坐标系，盘面重排、读法也整个换掉 ——
+ * 早先只换了盘面没换读法，那等于中式的圈套着西洋的话，是个缺陷。
  *
  * 出生数据只在浏览器里算，不发往任何服务器。
  */
@@ -15,8 +16,12 @@ const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
 const $ = id => document.getElementById(id);
 const norm = a => ((a % 360) + 360) % 360;
+const wait = ms => new Promise(r => setTimeout(r, ms));
 
 let DATA, chart = null, mode = 'west', plain = false, hsys = 'whole';
+let pick = { y: 2000, m: 1, d: 1 };            // 默认停在 2000-01-01
+let calY = 2000, calM = 1;
+let revealToken = 0;
 
 /* 内置城市表。不用第三方地理编码 —— 出生地点是个人数据，
    没有理由为了查经纬度把它送出去。时区为标准时，夏令时另勾。 */
@@ -62,24 +67,70 @@ const el = (t, attrs = {}, cls) => {
   return n;
 };
 
+/* ── 小日历 ─────────────────────────────────────
+   生日拆成三个数字框的时候，得先想清楚再敲。做成月历就只剩一次点击，
+   翻月的时候还顺手能看见星期几。默认停在 2000-01-01。 */
+function calendar(){
+  const box = $('cal');
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'calhead';
+  const mk = (t, fn, cls) => {
+    const b = document.createElement('span');
+    b.className = cls || 'calnav'; b.textContent = t;
+    if (fn) b.addEventListener('click', fn);
+    return b;
+  };
+  head.append(
+    mk('«', () => { calY--; calendar(); }),
+    mk('‹', () => { calM--; if (calM < 1){ calM = 12; calY--; } calendar(); }),
+    mk(`${calY} 年 ${calM} 月`, null, 'caltitle'),
+    mk('›', () => { calM++; if (calM > 12){ calM = 1; calY++; } calendar(); }),
+    mk('»', () => { calY++; calendar(); }));
+  box.appendChild(head);
+
+  const grid = document.createElement('div');
+  grid.className = 'calgrid';
+  for (const w of ['日', '一', '二', '三', '四', '五', '六']){
+    const c = document.createElement('span');
+    c.className = 'calwk'; c.textContent = w; grid.appendChild(c);
+  }
+  // 用 UTC 构造，免得本机时区把 1 号推到上个月去
+  const first = new Date(Date.UTC(calY, calM - 1, 1)).getUTCDay();
+  const days = new Date(Date.UTC(calY, calM, 0)).getUTCDate();
+  for (let i = 0; i < first; i++) grid.appendChild(document.createElement('span'));
+  for (let d = 1; d <= days; d++){
+    const c = document.createElement('span');
+    c.className = 'calday'; c.textContent = d;
+    if (calY === pick.y && calM === pick.m && d === pick.d) c.classList.add('on');
+    c.addEventListener('click', () => {
+      pick = { y: calY, m: calM, d };
+      calendar();
+    });
+    grid.appendChild(c);
+  }
+  box.appendChild(grid);
+  $('dstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
+}
+
 /* ── 排盘 ───────────────────────────────────── */
 function cast(){
-  const y = +$('by').value, mo = +$('bm').value, d = +$('bd').value;
   const hh = +$('bh').value, mm = +$('bmin').value;
   const ci = +$('bcity').value;
   const dst = $('bdst').checked ? 1 : 0;
   const [, lat, lon, tz] = CITIES[ci];
 
-  const c = compute(y, mo, d, hh + mm / 60, tz + dst, lat, lon);
+  const c = compute(pick.y, pick.m, pick.d, hh + mm / 60, tz + dst, lat, lon);
   c.city = CITIES[ci][0];
   c.cusp = houses(hsys, c.asc, c.mc);
   const names = DATA.planets.map(p => p.n)
     .filter(n => n !== '上升' && n !== '天顶' && n !== '南交点');
-  c.asp = aspects(c.bodies, DATA.aspects, names);
+  c.asp = aspects(c.bodies, DATA.aspects, names)
+    .sort((a, b) => a.orb - b.orb);         // 容许度越小越紧，紧的排前面
 
   // 中式：按赤经定宿。角宿是二十八宿之首，摆在盘的左边。
   c.xiuStart = DATA.mansions.find(m => m.n === '角').ra;
-  for (const [n, b] of Object.entries(c.bodies)){
+  for (const b of Object.values(c.bodies)){
     b.sign = Math.floor(b.lon / 30);
     b.deg = b.lon % 30;
     b.house = houseOf(b.lon, c.cusp);
@@ -90,8 +141,9 @@ function cast(){
   chart = c;
   draw();
   $('stamp').textContent =
-    `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')} `
+    `${pick.y}-${String(pick.m).padStart(2,'0')}-${String(pick.d).padStart(2,'0')} `
     + `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} · ${c.city}`;
+  runReading();
 }
 
 /* ── 画盘 ───────────────────────────────────── */
@@ -106,18 +158,16 @@ function draw(){
 
   if (mode === 'west'){
     DATA.signs.forEach((s, i) => {
-      const a0 = off(i * 30), a1 = off(i * 30 + 30);
-      const p = el('path', { d: arcPath(a0, a1, inner, outer) },
+      const p = el('path', { d: arcPath(off(i*30), off(i*30+30), inner, outer) },
                    `sec el-${s.el}`);
       p.addEventListener('click', () => show('sign', i));
       p.addEventListener('mousemove', e => card(e, s.n + '座', plain ? s.p : s.t));
       p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
-      const [tx, ty] = pos(off(i * 30 + 15), (inner + outer) / 2);
+      const [tx, ty] = pos(off(i*30 + 15), (inner + outer) / 2);
       const g = el('text', { x: tx, y: ty + 7 }, 'glyph');
       g.textContent = s.g; gRing.appendChild(g);
     });
-    // 宫位辐条
     chart.cusp.forEach((cu, i) => {
       const a = off(cu);
       const [x0, y0] = pos(a, hRing), [x1, y1] = pos(a, inner);
@@ -130,7 +180,6 @@ function draw(){
       t.addEventListener('click', () => show('house', i));
       gSpoke.appendChild(t);
     });
-    // 相位线
     for (const a of chart.asp){
       const [x0, y0] = pos(off(chart.bodies[a.a].lon), hRing - 8);
       const [x1, y1] = pos(off(chart.bodies[a.b].lon), hRing - 8);
@@ -146,25 +195,24 @@ function draw(){
   } else {
     // 中式：二十八宿，宿度不等 —— 这一圈的疏密本身就是内容
     DATA.mansions.forEach((m, i) => {
-      const a0 = off(m.ra), a1 = off(m.ra + m.deg);
-      const p = el('path', { d: arcPath(a0, a1, inner, outer) },
-                   'sec xiu-' + (i % 4));
+      const p = el('path', { d: arcPath(off(m.ra), off(m.ra + m.deg), inner, outer) },
+                   'sec xiang-' + m.xiang[0]);
       p.addEventListener('click', () => show('xiu', i));
       p.addEventListener('mousemove', e => card(e, m.n + '宿',
-        `宿度 ${m.deg.toFixed(1)}°　距星赤经 ${m.ra.toFixed(1)}°`));
+        `${m.xiang}　宿度 ${m.deg.toFixed(1)}°　分野 ${m.guo}·${m.zhou}`));
       p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
       const [tx, ty] = pos(off(m.ra + m.deg / 2), (inner + outer) / 2);
       const t = el('text', { x: tx, y: ty + 5 }, 'xname');
       t.textContent = m.n; gRing.appendChild(t);
     });
-    // 十二次
     DATA.ci.forEach((c, i) => {
-      const a0 = off(chart.xiuStart + i * 30), a1 = off(chart.xiuStart + i * 30 + 30);
-      const p = el('path', { d: arcPath(a0, a1, hRing, inner - 6) }, 'ci');
+      const p = el('path', { d: arcPath(off(chart.xiuStart + i*30),
+                                        off(chart.xiuStart + i*30 + 30),
+                                        hRing, inner - 6) }, 'ci');
       p.addEventListener('click', () => show('ci', i));
       gRing.appendChild(p);
-      const [tx, ty] = pos(off(chart.xiuStart + i * 30 + 15), (hRing + inner) / 2);
+      const [tx, ty] = pos(off(chart.xiuStart + i*30 + 15), (hRing + inner) / 2);
       const t = el('text', { x: tx, y: ty + 4 }, 'cname');
       t.textContent = c.n; gRing.appendChild(t);
     });
@@ -177,43 +225,46 @@ function draw(){
     if (!b) continue;
     if (mode === 'east' && (p.n === '上升' || p.n === '天顶')) continue;
     let a = off(mode === 'west' ? b.lon : b.ra);
-    while (placed.some(q => Math.abs(norm(a - q) > 180 ? 360 - norm(a - q)
-                                                       : norm(a - q)) < 6.5))
-      a = norm(a + 6.5);                       // 挤在一起时错开，免得叠成一坨
+    const gap = q => { const d = norm(a - q); return Math.min(d, 360 - d); };
+    while (placed.some(q => gap(q) < 6.5)) a = norm(a + 6.5);
     placed.push(a);
     const [x, y] = pos(a, ringP);
     const g = el('g', {}, 'body');
     g.appendChild(el('circle', { cx: x, cy: y, r: 15 }, 'bdot'));
     const t = el('text', { x, y: y + 7 }, 'bglyph');
-    t.textContent = p.g;
+    // 中式盘用中名的头一个字（日月水金火木土罗计），西洋盘用符号
+    t.textContent = mode === 'east' && p.cn !== '—' ? p.cn[0] : p.g;
     g.appendChild(t);
     const [lx, ly] = pos(a, ringP - 30);
-    const d = el('text', { x: lx, y: ly + 4 }, 'bdeg');
-    d.textContent = mode === 'west'
-      ? `${b.deg.toFixed(0)}°` : `${b.rudu.toFixed(0)}°`;
-    g.appendChild(d);
+    const dg = el('text', { x: lx, y: ly + 4 }, 'bdeg');
+    dg.textContent = mode === 'west' ? `${b.deg.toFixed(0)}°`
+                                     : `${b.rudu.toFixed(0)}°`;
+    g.appendChild(dg);
     g.addEventListener('click', () => show('planet', p.n));
-    g.addEventListener('mousemove', e => card(e, p.n, brief(p.n)));
+    g.addEventListener('mousemove', e => card(e, label(p), brief(p.n)));
     g.addEventListener('mouseleave', hideCard);
     gBody.appendChild(g);
   }
 
-  // 中心圈与上升标记
   gRing.appendChild(el('circle', { r: hRing }, 'gui'));
   gRing.appendChild(el('circle', { r: inner }, 'gui'));
   gRing.appendChild(el('circle', { r: outer }, 'gui'));
   if (mode === 'west'){
-    const [ax, ay] = pos(0, outer + 22);
-    const t = el('text', { x: ax, y: ay + 5 }, 'mark');
-    t.textContent = '上升'; gRing.appendChild(t);
-    const [mx, my] = pos(off(chart.mc), outer + 22);
-    const t2 = el('text', { x: mx, y: my + 5 }, 'mark');
-    t2.textContent = '天顶'; gRing.appendChild(t2);
+    for (const [lon, txt] of [[chart.asc, '上升'], [chart.mc, '天顶']]){
+      const [mx, my] = pos(off(lon), outer + 22);
+      const t = el('text', { x: mx, y: my + 5 }, 'mark');
+      t.textContent = txt; gRing.appendChild(t);
+    }
+  } else {
+    const [mx, my] = pos(0, outer + 22);
+    const t = el('text', { x: mx, y: my + 5 }, 'mark');
+    t.textContent = '角宿'; gRing.appendChild(t);
   }
 }
 
 /* ── 文案 ───────────────────────────────────── */
-const SIGNS = () => DATA.signs.map(s => s.n);
+const label = p => mode === 'east' && p.cn !== '—' ? `${p.cn}（${p.n}）` : p.n;
+const key = o => plain ? o.kp : o.kt;
 
 function brief(name){
   const b = chart.bodies[name];
@@ -221,69 +272,209 @@ function brief(name){
   if (mode === 'west')
     return `${DATA.signs[b.sign].n}座 ${b.deg.toFixed(1)}°　第 ${b.house + 1} 宫`;
   const m = DATA.mansions[b.xiu];
-  return `${m.n}宿 入宿 ${b.rudu.toFixed(1)}°`;
+  return `${m.n}宿 入宿 ${b.rudu.toFixed(1)}°　${m.xiang}`;
 }
 
-function show(kind, key){
-  const P = $('panel');
+/** 一颗星的合成句：行星给「哪份能力」，星座给「什么底色」，宫位给「哪块地方」。
+    拆成三块拼，好处是读的人一眼看得出这句是怎么来的，不会当成秘传断语。 */
+function compose(pn){
+  const p = DATA.planets.find(x => x.n === pn), b = chart.bodies[pn];
+  const s = DATA.signs[b.sign], h = DATA.houses[b.house];
+  return plain
+    ? `${key(p)}带着「${key(s)}」的底色，落在${key(h)}这一块。`
+    : `主${key(p)}，值${s.n}，${key(s)}；居${h.n}，主${key(h)}。`;
+}
+
+function show(kind, k){
   let title = '', sub = '', body = '';
   if (kind === 'planet'){
-    const p = DATA.planets.find(x => x.n === key), b = chart.bodies[key];
-    title = p.n; sub = p.g + (p.cn !== '—' ? '　中名 ' + p.cn : '');
-    body = (plain ? p.p : p.t) + '<br><br>'
-         + `<b>此盘</b>：${DATA.signs[b.sign].n}座 ${b.deg.toFixed(2)}°，`
-         + `第 ${b.house + 1} 宫（${DATA.houses[b.house].n}）；`
-         + `赤经落在 ${DATA.mansions[b.xiu].n}宿，入宿 ${b.rudu.toFixed(2)}°。`;
+    const p = DATA.planets.find(x => x.n === k), b = chart.bodies[k];
+    if (mode === 'east'){
+      // 中式读法：星在何宿、宿主何事、分野何国。跟西洋那套完全分开走。
+      const m = DATA.mansions[b.xiu];
+      title = label(p);
+      sub = `${m.n}宿 入宿 ${b.rudu.toFixed(2)}°　${m.xiang}　分野 ${m.guo}·${m.zhou}`;
+      body = (plain ? p.p : p.t)
+        + `<br><br><b>所临之宿</b>：${m.n}宿，${m.zhan}`
+        + `<br>此宿属${m.xiang}，分野在${m.guo}（${m.zhou}）。`
+        + `<br><br><b>入宿度</b>：${b.rudu.toFixed(2)}° —— `
+        + `中式定度自距星起算，宿度不等，此宿共 ${m.deg.toFixed(1)}°。`;
+    } else {
+      title = p.n; sub = p.g + (p.cn !== '—' ? '　中名 ' + p.cn : '');
+      body = (plain ? p.p : p.t) + '<br><br>' + compose(k)
+        + `<br><br><b>此盘</b>：${DATA.signs[b.sign].n}座 ${b.deg.toFixed(2)}°，`
+        + `第 ${b.house + 1} 宫（${DATA.houses[b.house].n}）。`;
+    }
   } else if (kind === 'sign'){
-    const s = DATA.signs[key];
+    const s = DATA.signs[k];
     title = s.n + '座'; sub = `${s.g}　${s.el}象 · ${s.q}宫　主星 ${s.r1}`;
     body = plain ? s.p : s.t;
   } else if (kind === 'house'){
-    const h = DATA.houses[key];
-    title = `第 ${key + 1} 宫`; sub = h.n;
+    const h = DATA.houses[k];
+    title = `第 ${k + 1} 宫`; sub = h.n;
     const inside = Object.entries(chart.bodies)
-      .filter(([n, b]) => b.house === key && !['上升','天顶','南交点'].includes(n))
+      .filter(([n, b]) => b.house === k && !['上升','天顶','南交点'].includes(n))
       .map(([n]) => n);
     body = (plain ? h.p : h.t)
          + (inside.length ? `<br><br><b>此盘落入</b>：${inside.join('、')}` : '');
   } else if (kind === 'asp'){
-    const d = DATA.aspects.find(x => x.n === key.type);
-    title = `${key.a} ${key.type} ${key.b}`;
-    sub = `${d.a}° 相位　实际 ${key.exact.toFixed(2)}°　容许 ${key.orb.toFixed(2)}°`;
+    const d = DATA.aspects.find(x => x.n === k.type);
+    title = `${k.a} ${k.type} ${k.b}`;
+    sub = `${d.a}° 相位　实际 ${k.exact.toFixed(2)}°　容许 ${k.orb.toFixed(2)}°`;
     body = plain ? d.p : d.t;
   } else if (kind === 'xiu'){
-    const m = DATA.mansions[key];
-    title = m.n + '宿'; sub = `宿度 ${m.deg.toFixed(2)}°　距星赤经 ${m.ra.toFixed(2)}°`;
+    const m = DATA.mansions[k];
+    title = m.n + '宿';
+    sub = `${m.xiang}　宿度 ${m.deg.toFixed(2)}°　分野 ${m.guo}·${m.zhou}`;
     const inside = Object.entries(chart.bodies)
-      .filter(([n, b]) => b.xiu === key && !['上升','天顶'].includes(n))
+      .filter(([n, b]) => b.xiu === k && !['上升','天顶'].includes(n))
       .map(([n, b]) => `${n}（入宿 ${b.rudu.toFixed(1)}°）`);
-    body = `二十八宿按赤道划分，宿度不等 —— 这一宿占 ${m.deg.toFixed(1)} 度。`
+    body = m.zhan
+         + `<br><br>二十八宿按赤道划分，宿度不等 —— 这一宿占 `
+         + `${m.deg.toFixed(1)} 度（最宽的井宿 32.2°，最窄的觜宿 1.4°）。`
          + (inside.length ? `<br><br><b>此盘落入</b>：${inside.join('、')}`
                           : '<br><br>此盘无星落入。');
   } else if (kind === 'ci'){
-    const c = DATA.ci[key];
+    const c = DATA.ci[k];
     title = c.n; sub = `十二次　分野 ${c.fen}　含 ${c.xiu}宿`;
     body = DATA.lore['十二次'] + '<br><br>' + DATA.lore['分野'];
   } else if (kind === 'lore'){
-    title = key; sub = ''; body = DATA.lore[key];
+    title = k; body = DATA.lore[k];
   }
   $('pn').textContent = title;
   $('pp').textContent = sub;
   $('pt').innerHTML = body;
-  P.classList.add('show');
+  $('panel').classList.add('show');
   document.body.classList.add('open');
 }
 
-const cardEl = () => $('card');
+/* ── 解析：排成一条一条 ─────────────────────────
+   两种模式各出各的，不共用句子 —— 中式盘的落点在「主何事」，
+   西洋盘的落点在「是个什么人」，混着写两边都不像。 */
+function lines(){
+  const L = [];
+  const B = chart.bodies, S = DATA.signs, M = DATA.mansions;
+  const sName = n => S[B[n].sign].n;
+  const SEVEN = ['太阳', '月亮', '水星', '金星', '火星', '木星', '土星'];
+
+  if (mode === 'west'){
+    L.push(['h', '西 洋 盘 · 传 统 读 法']);
+    L.push(['k', '三 要 素']);
+    for (const n of ['太阳', '月亮', '上升'])
+      L.push(['b', `${n} · ${sName(n)}座 ${B[n].deg.toFixed(1)}°`, compose(n)]);
+
+    const cnt = { el: {}, q: {} };
+    for (const p of DATA.planets){
+      if (['上升', '天顶', '南交点', '北交点'].includes(p.n)) continue;
+      const s = S[B[p.n].sign];
+      cnt.el[s.el] = (cnt.el[s.el] || 0) + 1;
+      cnt.q[s.q] = (cnt.q[s.q] || 0) + 1;
+    }
+    const topEl = Object.entries(cnt.el).sort((a, b) => b[1] - a[1])[0];
+    const topQ = Object.entries(cnt.q).sort((a, b) => b[1] - a[1])[0];
+    L.push(['k', '气 质 分 布']);
+    L.push(['b', '四象　' + ['火','土','风','水']
+              .map(e => `${e} ${cnt.el[e] || 0}`).join('　'),
+            plain ? DATA.elem[topEl[0]].p : DATA.elem[topEl[0]].t]);
+    L.push(['b', '三模式　' + ['基本','固定','变动']
+              .map(q => `${q} ${cnt.q[q] || 0}`).join('　'),
+            plain ? DATA.mode[topQ[0]].p : DATA.mode[topQ[0]].t]);
+
+    L.push(['k', '诸 星 所 居']);
+    for (const p of DATA.planets){
+      if (['太阳', '月亮', '上升', '天顶', '南交点'].includes(p.n)) continue;
+      const b = B[p.n];
+      L.push(['b',
+        `${p.n} · ${sName(p.n)}座 ${b.deg.toFixed(1)}° · 第 ${b.house + 1} 宫`,
+        compose(p.n)]);
+    }
+    if (chart.asp.length){
+      L.push(['k', '主 要 相 位']);
+      for (const a of chart.asp.slice(0, 6)){
+        const d = DATA.aspects.find(x => x.n === a.type);
+        L.push(['b', `${a.a} ${a.type} ${a.b}　相差 ${a.exact.toFixed(1)}°`,
+                plain ? d.p : d.t]);
+      }
+    }
+  } else {
+    L.push(['h', '中 式 盘 · 七 政 四 余']);
+    const am = M[B['上升'].xiu];
+    L.push(['k', '命 宫 所 临']);
+    L.push(['b', `命宫在${am.n}宿　入宿 ${B['上升'].rudu.toFixed(1)}°`,
+            `${am.n}宿属${am.xiang}，分野在${am.guo}（${am.zhou}）。${am.zhan}`]);
+
+    L.push(['k', '七 政 所 临']);
+    for (const n of SEVEN){
+      const b = B[n], m = M[b.xiu];
+      const p = DATA.planets.find(x => x.n === n);
+      L.push(['b', `${p.cn}（${n}）在${m.n}宿 ${b.rudu.toFixed(1)}°`,
+              `${m.zhan}　分野 ${m.guo}·${m.zhou}`]);
+    }
+
+    L.push(['k', '四 余 之 二']);
+    for (const n of ['北交点', '南交点']){
+      const b = B[n], m = M[b.xiu];
+      const p = DATA.planets.find(x => x.n === n);
+      L.push(['b', `${p.cn}（${n}）在${m.n}宿 ${b.rudu.toFixed(1)}°`,
+              (plain ? p.p : p.t) + `　所临${m.n}宿，${m.zhan}`]);
+    }
+
+    const xc = {};
+    for (const n of SEVEN)
+      xc[M[B[n].xiu].xiang] = (xc[M[B[n].xiu].xiang] || 0) + 1;
+    const top = Object.entries(xc).sort((a, b) => b[1] - a[1])[0];
+    L.push(['k', '四 象 分 布']);
+    L.push(['b', Object.entries(xc).map(([k, v]) => `${k} ${v}`).join('　'),
+            `七政以${top[0]}为多。四象各主一方一季 —— `
+            + '苍龙主春，朱雀主夏，白虎主秋，玄武主冬。']);
+
+    const gs = {};
+    for (const n of SEVEN)
+      gs[M[B[n].xiu].guo] = (gs[M[B[n].xiu].guo] || 0) + 1;
+    L.push(['k', '分 野 所 聚']);
+    L.push(['b', Object.entries(gs).sort((a, b) => b[1] - a[1])
+                   .map(([k, v]) => `${k} ${v}`).join('　'),
+            '分野是把天上的宿配到地上的国州。它本来是给王朝看的 —— '
+            + '某宿有异，应在某地，不是给个人算的。这里当一层地理注脚看。']);
+  }
+  L.push(['f', mode === 'west'
+    ? '以上按西洋传统读法排出。位置是算的，读法是传统的 —— 两者不是一回事。'
+    : '以上按七政四余的路子排出。中国星占的落点在「主何事」，不在性格。']);
+  return L;
+}
+
+/** 逐条浮现。重排时用 token 作废上一轮，免得两批动画叠在一起。 */
+async function runReading(){
+  const box = $('read');
+  const my = ++revealToken;
+  box.innerHTML = '';
+  for (const [kind, a, b] of lines()){
+    if (my !== revealToken) return;              // 已被新的一轮顶掉
+    const row = document.createElement('div');
+    row.className = 'rl ' + kind;
+    row.innerHTML = kind === 'b'
+      ? `<div class="rt">${a}</div><div class="rb">${b}</div>`
+      : a;
+    box.appendChild(row);
+    // 强制回流让初始状态落定，再加 .in ——
+    // 不能用 requestAnimationFrame：标签页在后台时它根本不触发，
+    // 那样整栏会永远停在 opacity 0，切回来是一片空白。
+    void row.offsetWidth;
+    row.classList.add('in');
+    await wait(kind === 'h' ? 300 : kind === 'k' ? 220 : 140);
+  }
+}
+
+/* ── 悬停卡与面板 ───────────────────────────── */
 function card(e, t, s){
-  const c = cardEl();
+  const c = $('card');
   c.innerHTML = `<div class="cn">${t}</div><div class="cb">${s}</div>`;
   c.classList.add('on');
   const w = c.offsetWidth || 240;
-  c.style.left = Math.min(Math.max(e.clientX, w / 2 + 8), innerWidth - w / 2 - 8) + 'px';
+  c.style.left = Math.min(Math.max(e.clientX, w/2 + 8), innerWidth - w/2 - 8) + 'px';
   c.style.top = Math.max(c.offsetHeight + 16, e.clientY) + 'px';
 }
-const hideCard = () => cardEl().classList.remove('on');
+const hideCard = () => $('card').classList.remove('on');
 
 function closePanel(){
   $('panel').classList.remove('show');
@@ -291,19 +482,16 @@ function closePanel(){
 }
 
 /* ── 装配 ───────────────────────────────────── */
-function fillForm(){
+export function mount(){
   const sel = $('bcity');
   CITIES.forEach(([n], i) => {
     const o = document.createElement('option');
     o.value = i; o.textContent = n; sel.appendChild(o);
   });
-  sel.value = 16;                                   // 默认柏林
-  const now = new Date();
-  $('by').value = 1990; $('bm').value = 6; $('bd').value = 15;
+  sel.value = 16;                                    // 默认柏林
   $('bh').value = 12; $('bmin').value = 0;
-}
+  calendar();
 
-function railLinks(){
   const box = $('secs');
   const mk = (title, keys) => {
     const sec = document.createElement('div');
@@ -318,17 +506,13 @@ function railLinks(){
     }
     sec.append(h, b); return sec;
   };
-  box.append(
-    mk('西 洋 占 星', ['黄道十二宫', '岁差', '上升点', '宫位制', '相位']),
-    mk('中 国 星 命', ['七政四余', '二十八宿', '十二次', '分野',
-                       '紫微斗数', '荧惑守心', '岁星纪年']));
-}
 
-export function mount(){
   fetch('astrodata.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
     DATA = d;
-    fillForm();
-    railLinks();
+    box.append(
+      mk('西 洋 占 星', ['黄道十二宫', '岁差', '上升点', '宫位制', '相位']),
+      mk('中 国 星 命', ['七政四余', '二十八宿', '十二次', '分野',
+                         '紫微斗数', '荧惑守心', '岁星纪年']));
     cast();
   });
 
@@ -341,16 +525,21 @@ export function mount(){
     plain = !plain;
     $('plain').textContent = plain ? '说 人 话' : '术 语';
     $('plain').classList.toggle('on', plain);
+    if (chart) runReading();
   });
   document.querySelectorAll('.seg button').forEach(b => {
     b.addEventListener('click', () => {
       document.querySelectorAll('.seg button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
       mode = b.dataset.m;
-      closePanel(); draw();
+      closePanel(); draw(); runReading();
     });
   });
   $('hsys').addEventListener('change', () => { hsys = $('hsys').value; cast(); });
+  $('railtoggle').addEventListener('click',
+    () => document.body.classList.toggle('rail-off'));
+  $('readtoggle').addEventListener('click',
+    () => document.body.classList.toggle('read-off'));
 
   const srcBox = $('src');
   $('srcbtn').addEventListener('click', () => srcBox.classList.add('on'));

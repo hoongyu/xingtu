@@ -10,7 +10,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
 <link rel="stylesheet" href="engine.css?v=366a97f1">
-<link rel="stylesheet" href="astro.css?v=b0902ed6">
+<link rel="stylesheet" href="astro.css?v=3b85be3b">
 
 <div id="bar">
   <div id="title">星 盤</div>
@@ -30,9 +30,8 @@
   <div class="railsec">
     <h3>出 生 数 据</h3>
     <div class="form">
-      <label>年 <input id="by" type="number" min="1800" max="2050"></label>
-      <label>月 <input id="bm" type="number" min="1" max="12"></label>
-      <label>日 <input id="bd" type="number" min="1" max="31"></label>
+      <div id="cal"></div>
+      <div id="dstamp"></div>
       <label>时 <input id="bh" type="number" min="0" max="23"></label>
       <label>分 <input id="bmin" type="number" min="0" max="59"></label>
       <label class="wide">地点 <select id="bcity"></select></label>
@@ -82,6 +81,9 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 <svg id="wheel"></svg>
 <div id="card"></div>
 
+<aside id="read"></aside>
+<div id="readtoggle">解 析</div>
+
 <div id="panel">
   <div id="close">关</div>
   <div class="top"><h2 id="pn"></h2><span class="py" id="pp"></span></div>
@@ -89,6 +91,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=26c7576f';
+import { mount } from './astro.js?v=ec1008a5';
 mount();
 </script>

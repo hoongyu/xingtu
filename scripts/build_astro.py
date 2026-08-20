@@ -187,6 +187,10 @@ WEST_LORE = {
 }
 
 
+from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
+                           XIU_ZHAN, ELEM_READ, MODE_READ)
+
+
 def mansions():
     """二十八宿的赤经界限，取自距星实测位置（J2000）。"""
     lm = SKY['lunar_mansions']
@@ -195,19 +199,33 @@ def mansions():
     for i, (ra, nm) in enumerate(rows):
         nxt = rows[(i + 1) % len(rows)][0]
         span = (nxt - ra) % 360
-        out.append({'n': nm[:-2] if nm.endswith('宿一') else nm,
-                    'ra': round(ra, 3), 'deg': round(span, 3)})
+        n = nm[:-2] if nm.endswith('宿一') else nm
+        fy = FENYE[n]
+        out.append({'n': n, 'ra': round(ra, 3), 'deg': round(span, 3),
+                    'xiang': XIANG[n], 'guo': fy[0], 'zhou': fy[1],
+                    'zhan': XIU_ZHAN[n]})
+    # 出口断言：分野、四象、占辞三张表必须各覆盖二十八宿，
+    # 少一条不会报错，只会让某颗星落进去时读不出东西。
+    got = {x['n'] for x in out}
+    for nm2, tbl in (('四象', XIANG), ('分野', FENYE), ('占辞', XIU_ZHAN)):
+        miss = got - set(tbl)
+        assert not miss, f"{nm2}表缺这些宿：{sorted(miss)}"
     return out
 
 
 def build():
     payload = {
         'signs': [{'n': n, 'g': g, 'el': el, 'q': q, 'r0': r0, 'r1': r1,
-                   't': t, 'p': p}
+                   't': t, 'p': p, 'kt': SIGN_KEY[n][0], 'kp': SIGN_KEY[n][1]}
                   for n, g, el, q, r0, r1, t, p in SIGNS],
-        'planets': [{'n': n, 'g': g, 'cn': cn, 't': t, 'p': p}
+        'planets': [{'n': n, 'g': g, 'cn': cn, 't': t, 'p': p,
+                     'kt': PLANET_KEY[n][0], 'kp': PLANET_KEY[n][1]}
                     for n, g, cn, t, p in PLANETS],
-        'houses': [{'n': n, 't': t, 'p': p} for n, t, p in HOUSES],
+        'houses': [{'n': n, 't': t, 'p': p,
+                    'kt': HOUSE_KEY[i + 1][0], 'kp': HOUSE_KEY[i + 1][1]}
+                   for i, (n, t, p) in enumerate(HOUSES)],
+        'elem': {k: {'t': v[0], 'p': v[1]} for k, v in ELEM_READ.items()},
+        'mode': {k: {'t': v[0], 'p': v[1]} for k, v in MODE_READ.items()},
         'aspects': [{'n': n, 'a': a, 'orb': o, 'k': k, 't': t, 'p': p}
                     for n, a, o, k, t, p in ASPECTS],
         'ci': [{'n': n, 'fen': f, 'xiu': x} for n, f, x in CI],

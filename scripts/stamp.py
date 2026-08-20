@@ -55,7 +55,7 @@ def main():
         print(f'  og:image -> {base}card.png')
     for a, h in tags.items():
         print(f'  {a:<20} {h}')
-    print(f'\n  已戳进 index.html / concept.html')
+    print('\n  已戳进 index.html / concept.html / astro.html')
 
 
 if __name__ == '__main__':

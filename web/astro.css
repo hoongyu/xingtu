@@ -12,11 +12,12 @@ body:not(.rail-off) #wheel{padding-left:212px}
 .el-土{fill:rgba(150,140,90,.10)}
 .el-风{fill:rgba(140,170,200,.09)}
 .el-水{fill:rgba(90,130,170,.11)}
-/* 二十八宿：四象各七宿，按四组轮转上色 */
-.xiu-0{fill:rgba(90,140,180,.10)}
-.xiu-1{fill:rgba(201,80,63,.09)}
-.xiu-2{fill:rgba(160,150,100,.10)}
-.xiu-3{fill:rgba(120,120,140,.10)}
+/* 二十八宿按四象上色。东苍龙、南朱雀、西白虎、北玄武 ——
+   颜色直接绑在 xiang 字段上，不再靠序号轮转碰巧对齐。 */
+.xiang-东{fill:rgba(90,150,120,.11)}
+.xiang-南{fill:rgba(201,80,63,.10)}
+.xiang-西{fill:rgba(190,185,175,.10)}
+.xiang-北{fill:rgba(80,110,165,.12)}
 .ci{fill:rgba(217,180,95,.045);stroke:rgba(232,226,212,.08);
   stroke-width:.6;cursor:pointer}
 .ci:hover{fill:rgba(217,180,95,.14)}
@@ -92,3 +93,101 @@ body:not(.rail-off) #wheel{padding-left:212px}
 #card .cn{font-family:var(--song);font-size:15px;letter-spacing:.1em;margin-bottom:5px}
 #card .cb{font-size:11.5px;line-height:1.8;color:rgba(232,226,212,.8)}
 #panel p b{color:var(--gold);font-weight:500}
+
+/* ── 小日历 ───────────────────────────────────────
+   三个数字框换成月历。整块宽度跟着侧栏走，别撑破 212px。 */
+#cal{width:100%;margin-bottom:2px;user-select:none}
+.calhead{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:2px;margin-bottom:6px;
+}
+.calnav{
+  font-size:12px;color:var(--ink-dim);cursor:pointer;padding:1px 4px;
+  transition:color .2s ease;
+}
+.calnav:hover{color:var(--gold)}
+.caltitle{
+  flex:1;text-align:center;font-family:var(--song);font-size:12px;
+  letter-spacing:.06em;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.calwk{
+  font-size:9.5px;color:var(--ink-faint);text-align:center;
+  padding-bottom:3px;letter-spacing:0;
+}
+.calday{
+  font-size:10.5px;color:var(--ink-dim);text-align:center;
+  padding:3px 0;cursor:pointer;font-variant-numeric:tabular-nums;
+  transition:background .18s ease,color .18s ease;
+}
+.calday:hover{background:rgba(232,226,212,.08);color:var(--ink)}
+.calday.on{background:var(--gold);color:var(--void)}
+#dstamp{
+  font-family:var(--song);font-size:12px;letter-spacing:.08em;color:var(--gold);
+  text-align:center;padding:5px 0 3px;margin-bottom:4px;
+  border-top:1px solid rgba(232,226,212,.08);
+}
+
+/* ── 解析栏 ───────────────────────────────────────
+   一条一条浮现。用 transition 而不是 animation，因为重排时
+   直接清空重建，animation 残留的状态会让第二轮不播。 */
+#read{
+  position:fixed;top:88px;right:0;bottom:0;width:330px;z-index:6;
+  overflow-y:auto;padding:22px 22px 60px;
+  background:linear-gradient(to left,rgba(5,7,12,.96),rgba(5,7,12,.82));
+  border-left:1px solid rgba(232,226,212,.08);
+  transition:transform .45s cubic-bezier(.4,0,.2,1);
+}
+body.read-off #read{transform:translateX(100%)}
+/* 详情面板贴底通栏，右边要给解析栏让出位置 —— 
+   跟 engine.css 里给侧栏让 padding-left 是同一套做法。 */
+body:not(.read-off) #panel{padding-right:360px}
+#panel{transition:transform .68s var(--ease),padding-right .45s var(--ease)}
+body:not(.read-off) #wheel{padding-right:330px}
+
+.rl{
+  opacity:0;transform:translateY(9px);
+  transition:opacity .6s ease,transform .6s cubic-bezier(.2,.8,.3,1);
+}
+.rl.in{opacity:1;transform:none}
+.rl.h{
+  font-family:var(--song);font-size:15px;letter-spacing:.22em;color:var(--gold);
+  text-align:center;padding-bottom:14px;margin-bottom:16px;
+  border-bottom:1px solid rgba(217,180,95,.22);
+}
+.rl.k{
+  font-family:var(--song);font-size:11.5px;letter-spacing:.26em;
+  color:var(--ink-faint);margin:20px 0 9px;
+}
+.rl.b{margin-bottom:13px}
+.rl.b .rt{
+  font-size:12px;color:var(--ink);letter-spacing:.03em;margin-bottom:3px;
+  font-variant-numeric:tabular-nums;
+}
+.rl.b .rb{font-size:11px;line-height:1.85;color:rgba(232,226,212,.62)}
+.rl.f{
+  font-size:10.5px;line-height:1.9;color:var(--ink-faint);
+  margin-top:24px;padding-top:12px;
+  border-top:1px solid rgba(232,226,212,.08);
+}
+
+#readtoggle{
+  position:fixed;right:0;top:50%;z-index:31;transform:translateY(-50%);
+  writing-mode:vertical-rl;font-family:var(--song);font-size:12px;
+  letter-spacing:.34em;color:var(--ink-dim);background:rgba(5,7,12,.9);
+  border:1px solid var(--ink-faint);border-right:none;padding:14px 5px;
+  cursor:pointer;transition:color .3s ease,right .45s var(--ease);
+}
+#readtoggle:hover{color:var(--gold)}
+body:not(.read-off) #readtoggle{right:330px}
+
+/* 窄屏：盘面优先，解析与侧栏都收起来，留按钮自己开 */
+@media (max-width:1180px){
+  #read{width:290px}
+  body:not(.read-off) #wheel{padding-right:290px}
+  body:not(.read-off) #readtoggle{right:290px}
+  body:not(.read-off) #panel{padding-right:320px}
+}
+@media (max-width:900px){
+  body:not(.read-off) #wheel,body:not(.rail-off) #wheel{padding:0}
+}
