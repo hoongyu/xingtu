@@ -160,6 +160,30 @@ function cast(){
       ? '入相' : '出相';
   }
 
+  /* ── 五种必然尊贵要用到的三个量 ─────────────────────────
+     都是算的，不是判断的。 */
+
+  // 昼生还是夜生：太阳在不在地平线上。第七到十二宫在地平线之上。
+  // 三分性主星按昼夜分两位，所以这个量直接决定后面的加分。
+  c.sect = c.bodies['太阳'].house >= 6 ? '昼' : '夜';
+
+  // 逆行：拿一天后的黄经比一下。慢星一天只走千分之几度，
+  // 但方向是明确的 —— 判的是符号，不是幅度。
+  const nextDay = compute(pick.y, pick.m, pick.d + 1, hh + mm / 60,
+                          tz + dst, lat, lon);
+  const sunLon = c.bodies['太阳'].lon;
+  for (const p of DATA.planets){
+    const b = c.bodies[p.n], nb = nextDay.bodies[p.n];
+    if (!b || !nb) continue;
+    let d = norm(nb.lon - b.lon);
+    if (d > 180) d -= 360;
+    b.retro = d < 0;
+    // 焦伤与日下：离太阳多远。核心（cazimi）是十七分以内。
+    let s = Math.abs(norm(b.lon - sunLon));
+    if (s > 180) s = 360 - s;
+    b.sunDist = s;
+  }
+
   /* ── 落到生活上的那几层，需要的几个量 ───────────────────
      宫主星：一个宫头落在哪个星座，那个星座的传统主星就是这一宫的主星。
      传统上看「这件事从哪儿来」就看宫主星落在第几宫 —— 七宫主看伴侣
@@ -466,27 +490,81 @@ const hms = deg => {
   return `${Math.floor(h)}h${String(Math.floor(m)).padStart(2, '0')}m`;
 };
 
-/** 庙旺陷落。四种状态由一张固定对照表定，不含判断。 */
-function dignityOf(pn, signName){
-  const d = DATA.dignity[pn];
-  if (!d) return null;
-  if (d['庙'].includes(signName)) return '庙';
-  if (d['旺'][0] === signName) return '旺';
-  if (d['陷'].includes(signName)) return '陷';
-  if (d['落'] === signName) return '落';
-  return '平';
+/* ── 五种必然尊贵 ─────────────────────────────────────
+   先前这一节只查庙旺陷落，四项合起来只覆盖黄道的四成上下，
+   七颗星里六颗落空，页面上一水儿的「居平，看别处」——
+   那不是解析，是没话找话。
+
+   古典占星本来就有更细的尺子：三分性按元素与昼夜分，界按度数分
+   （每宫五段），面按十度一分（三十六面）。黄道上**每一度**都有
+   三分主、界主、面主，所以没有一颗星会「什么都不是」。
+   五项真的一项未得时，它有专名：游离（peregrine），古典上算无力。
+   「无所依托」是个判断，跟「看别处」不是一回事。
+
+   分值用李利《基督教占星学》那套：庙 5、旺 4、三分 3、界 2、面 1，
+   陷 −5、落 −4、游离 −5，另有逆行 −5、焦伤 −5、日下 −4、核心 +5。
+   分值是为了能排序、能比出谁最有力，页面上每一分都写清是哪条规则给的。 */
+
+/** 某颗星在自己所落度数上，五种尊贵各归谁。用来交代「凭什么」。 */
+function ownersAt(sn, deg){
+  const elem = DATA.elemOf[sn];
+  const tri = DATA.trip[elem];
+  const seg = DATA.terms[sn].find(([, a, b]) => deg >= a && deg < b)
+           || DATA.terms[sn][DATA.terms[sn].length - 1];
+  const fi = Math.min(2, Math.floor(deg / 10));
+  return {
+    庙: DATA.signs.find(s => s.n === sn).r0,
+    三分: { 本: tri[chart.sect], 共: tri['共'], 象: elem },
+    界: { 主: seg[0], a: seg[1], b: seg[2] },
+    面: { 主: DATA.faces[sn][fi], a: fi * 10, b: fi * 10 + 10 },
+  };
 }
 
-/** 庙旺那一条的依据句 —— 说清这个结论是从表上哪一行来的。 */
-function dignityWhy(pn, state){
-  const d = DATA.dignity[pn];
-  const home = d['庙'].join('、'), ex = `${d['旺'][0]} ${d['旺'][1]} 度`;
-  const base = `${pn}庙于${home}，旺于${ex}。`;
-  if (state === '庙') return base + '此处正是其庙。';
-  if (state === '旺') return base + '此处正是其擢升之位。';
-  if (state === '陷') return base + `${d['陷'].join('、')}是庙位的对宫，故为陷。`;
-  if (state === '落') return base + `${d['落']}是旺位的对宫，故为落。`;
-  return base + '此处既非庙旺，也非陷落。';
+/** 逐条核。返回 [种类, 依据] 的数组 —— 每一项都带着自己的凭据。 */
+function dignitiesOf(pn){
+  // B/S 在 lines() 里是局部的，这里在外层，直接从 chart/DATA 取
+  const B = chart.bodies, S = DATA.signs;
+  const b = B[pn], sn = S[b.sign].n, deg = b.deg;
+  const D = DATA.dignity[pn], o = ownersAt(sn, deg);
+  const hits = [];
+  if (D){
+    if (D['庙'].includes(sn)) hits.push(['庙', `${sn}正是${pn}的庙`]);
+    if (D['旺'][0] === sn)
+      hits.push(['旺', `${sn}是${pn}的擢升之位（精确擢升度 ${D['旺'][1]}°）`]);
+    if (D['陷'].includes(sn))
+      hits.push(['陷', `${sn}是${pn}庙位（${D['庙'].join('、')}）的对宫`]);
+    if (D['落'] === sn)
+      hits.push(['落', `${sn}是${pn}旺位（${D['旺'][0]}）的对宫`]);
+  }
+  if (o.三分.本 === pn)
+    hits.push(['三分', `${o.三分.象}象、${chart.sect}生盘，三分主正是${pn}`]);
+  else if (o.三分.共 === pn)
+    hits.push(['三分', `${o.三分.象}象的共同三分主是${pn}，昼夜通用`]);
+  if (o.界.主 === pn)
+    hits.push(['界', `${sn} ${o.界.a}–${o.界.b}° 这一界归${pn}`]);
+  if (o.面.主 === pn)
+    hits.push(['面', `${sn} ${o.面.a}–${o.面.b}° 这一面归${pn}`]);
+
+  // 游离：五项必然尊贵一项未得，且不在陷落。这是古典的定义，不是我定的。
+  const kinds = hits.map(h => h[0]);
+  const hasEssential = kinds.some(k => ['庙','旺','三分','界','面'].includes(k));
+  const hasDebility = kinds.some(k => ['陷','落'].includes(k));
+  if (!hasEssential && !hasDebility)
+    hits.push(['游离',
+      `五项逐一核过：${sn}属${o.庙}、`
+      + `三分归${o.三分.本}（${o.三分.象}象${chart.sect}生）与${o.三分.共}、`
+      + `${o.界.a}–${o.界.b}° 的界归${o.界.主}、`
+      + `${o.面.a}–${o.面.b}° 的面归${o.面.主} —— 没有一项是${pn}`]);
+
+  // 必然无力之外的几项：逆行与离日远近。也都是算出来的。
+  if (b.retro) hits.push(['逆行', '出生时该星在逆行']);
+  if (pn !== '太阳' && pn !== '月亮'){
+    if (b.sunDist < 0.283) hits.push(['核心', `距太阳仅 ${(b.sunDist * 60).toFixed(1)} 分`]);
+    else if (b.sunDist < 8.5) hits.push(['焦伤', `距太阳 ${b.sunDist.toFixed(2)}°，不足 8.5°`]);
+    else if (b.sunDist < 17) hits.push(['日下', `距太阳 ${b.sunDist.toFixed(2)}°，不足 17°`]);
+  }
+  const total = hits.reduce((s, h) => s + DATA.score[h[0]], 0);
+  return { hits, total };
 }
 
 function lines(){
@@ -542,11 +620,13 @@ function lines(){
             `${sName('上升')}座的传统主星是${chart.ruler}，故以${chart.ruler}为命主。`,
             ['planet', '上升']]);
     if (rb){
-      const st = dignityOf(chart.ruler, sName(chart.ruler));
+      const d = dignitiesOf(chart.ruler);
+      const tag = d.hits.map(h => h[0]).join('、') || '无';
       L.push(['b',
         `命主星 ${chart.ruler} · ${sName(chart.ruler)} ${rb.deg.toFixed(2)}° · 第 ${rb.house + 1} 宫`
-        + (st ? `　居${st}` : ''),
-        compose(chart.ruler) + (st ? `　${dignityWhy(chart.ruler, st)}` : ''),
+        + `　${tag}　合计 ${d.total >= 0 ? '+' : ''}${d.total}`,
+        compose(chart.ruler)
+        + `　命主星有力与否，古典上直接看它的必然尊贵 —— 详见第四节。`,
         ['planet', chart.ruler]]);
     }
 
@@ -557,16 +637,47 @@ function lines(){
                  + (n !== '上升' ? ` · 第 ${B[n].house + 1} 宫` : ''),
               compose(n), ['planet', n]]);
 
-    // ── 四 · 庙旺陷落 ──
-    L.push(['k', '四 · 七 政 的 庙 旺 陷 落　【传·有定规】']);
-    L.push(['n', '这是古典占星里少数几条有固定对照表的东西：'
-               + '庙＝行星在自己的宫，旺＝在擢升之位，陷＝庙位的对宫，落＝旺位的对宫。'
-               + '不含判断，谁来算都一样，可以逐条核对。']);
-    for (const n of SEVEN){
-      const st = dignityOf(n, sName(n));
-      L.push(['b', `${n} · ${sName(n)} ${B[n].deg.toFixed(1)}°　居${st}`,
-              dignityWhy(n, st) + '　' + dg(DATA.dignityRead[st]),
-              ['planet', n]]);
+    // ── 四 · 必然尊贵 ──
+    L.push(['k', '四 · 七 政 的 必 然 尊 贵　【传·有定规】']);
+    L.push(['n', '古典占星里少数几条有固定对照表、能逐条核对的东西。'
+               + '五种尊贵：庙（在自己的宫，+5）、旺（擢升之位，+4）、'
+               + '三分性（按元素与昼夜，+3）、界（每宫分五段按度数，+2）、'
+               + '面（每十度一分，+1）；无力则有陷 −5、落 −4。'
+               + '黄道上每一度都有三分主、界主、面主，'
+               + '所以每颗星都查得出结果。'
+               + '真的五项皆无时古典称「游离」，算 −5 —— '
+               + '不是没脾气，是没根据地：那份能力得靠别的条件撑着才使得出来，'
+               + '自己立不住。下面每条游离都写出五项分别归谁，好核对。'
+               + `此盘为${chart.sect}生盘（太阳在地平线`
+               + `${chart.sect === '昼' ? '之上' : '之下'}），三分性按此取。`]);
+    {
+      const table = SEVEN.map(n => ({ n, ...dignitiesOf(n) }))
+                         .sort((a, b) => b.total - a.total);
+      for (const row of table){
+        const b = B[row.n];
+        const tag = row.hits.map(h => h[0]).join('、') || '无';
+        L.push(['b',
+          `${row.n} · ${sName(row.n)} ${b.deg.toFixed(1)}°　${tag}　`
+          + `合计 ${row.total >= 0 ? '+' : ''}${row.total}`,
+          row.hits.map(h =>
+            `${h[0]} ${DATA.score[h[0]] >= 0 ? '+' : ''}${DATA.score[h[0]]}：`
+            + h[1] + (h[0] === '游离' ? '' : '。' + dg(DATA.why[h[0]])))
+            .join('　／　'),
+          ['planet', row.n]]);
+      }
+      // 全盘总评。说的是这张盘的结构 —— 强在哪、弱在哪、还是普遍无依。
+      const best = table[0], worst = table[table.length - 1];
+      const peregrine = table.filter(r => r.hits.some(h => h[0] === '游离'));
+      const tone = best.total >= 5 ? DATA.tone.strong
+                 : peregrine.length >= 5 ? DATA.tone.flat
+                 : DATA.tone.mixed;
+      L.push(['b', `全盘　最强 ${best.n}（${best.total >= 0 ? '+' : ''}${best.total}）　`
+                 + `最弱 ${worst.n}（${worst.total >= 0 ? '+' : ''}${worst.total}）　`
+                 + `游离 ${peregrine.length} 颗`,
+              tone.replace('{best}', best.n).replace('{bs:+d}',
+                  (best.total >= 0 ? '+' : '') + best.total)
+                  .replace('{worst}', worst.n).replace('{ws:+d}',
+                  (worst.total >= 0 ? '+' : '') + worst.total)]);
     }
 
     // ── 五 · 气质分布 ──
@@ -687,10 +798,13 @@ function lines(){
             + `这件事主要在${DATA.houses[B['太阳'].house].n}那一块展开。`,
             ['planet', '太阳']]);
     {
-      const sb = B['土星'], st = dignityOf('土星', sName('土星'));
-      L.push(['b', `土星 · ${sName('土星')} · 第 ${sb.house + 1} 宫　居${st}`,
+      const sb = B['土星'], sd = dignitiesOf('土星');
+      L.push(['b', `土星 · ${sName('土星')} · 第 ${sb.house + 1} 宫　`
+                 + `合计 ${sd.total >= 0 ? '+' : ''}${sd.total}`,
               `传统上土星所在的宫是「慢熟、要吃苦、但最后最结实」的那一块 ——`
-              + `这里是${DATA.houses[sb.house].n}。${dg(DATA.dignityRead[st])}。`,
+              + `这里是${DATA.houses[sb.house].n}。`
+              + (sd.total < 0 ? '这颗土星本身也不强，所以这块地方多半是硬熬出来的。'
+                              : '这颗土星站得住，扛起来相对有底。'),
               ['planet', '土星']]);
     }
     {

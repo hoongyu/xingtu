@@ -197,6 +197,27 @@ from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
                            DIGNITY, DIGNITY_READ, JIEQI, MOON_PHASE)
 from astro_life import (VENUS_SIGN, MARS_SIGN, MC_SIGN, HOUSE_SOURCE,
                         VENUS_ASPECT, CYCLE_READ, TRANSIT_HOUSE)
+from astro_dignity import (TRIPLICITY, TERMS, TERM_TOTALS, FACES, SCORE,
+                           DIGNITY_WHY, CHART_TONE, ELEM_OF)
+
+
+def check_terms():
+    """界表的出厂检验。写错一个数就在这里断掉，不会流到页面上。
+
+    两条性质：每宫五段合计三十度且首尾相接不留缝；
+    五星在整条黄道上各占的总度数是固定的（土57 木79 火66 金82 水76，
+    合计 360）—— 后面这条是这套埃及界表流传下来就带着的，抄错必然对不上。"""
+    tot = {}
+    for sign, segs in TERMS.items():
+        assert segs[0][1] == 0 and segs[-1][2] == 30, f'{sign} 界首尾不对'
+        assert sum(b - a for _, a, b in segs) == 30, f'{sign} 界合计不是 30 度'
+        for i in range(len(segs) - 1):
+            assert segs[i][2] == segs[i + 1][1], f'{sign} 界第 {i+1} 段留缝'
+        for pl, a, b in segs:
+            tot[pl] = tot.get(pl, 0) + (b - a)
+    assert tot == TERM_TOTALS, f'界表各星总度数对不上：{tot}'
+    assert sum(len(v) for v in FACES.values()) == 36, '面不是三十六个'
+    return tot
 
 
 def mansions():
@@ -247,6 +268,15 @@ def build():
         'venusAsp': {f'{k[0]}|{k[1]}': v for k, v in VENUS_ASPECT.items()},
         'cycle': {k: {'t': v[0], 'p': v[1]} for k, v in CYCLE_READ.items()},
         'transitHouse': TRANSIT_HOUSE,
+        # 五种必然尊贵。有了三分性、界、面之后，黄道上每一度都有说法，
+        # 不会再出现整节「居平，看别处」。
+        'trip': TRIPLICITY,
+        'terms': TERMS,
+        'faces': FACES,
+        'score': SCORE,
+        'why': {k: {'t': v[0], 'p': v[1]} for k, v in DIGNITY_WHY.items()},
+        'tone': CHART_TONE,
+        'elemOf': ELEM_OF,
         'aspects': [{'n': n, 'a': a, 'orb': o, 'k': k, 't': t, 'p': p}
                     for n, a, o, k, t, p in ASPECTS],
         'ci': [{'n': n, 'fen': f, 'xiu': x} for n, f, x in CI],
@@ -262,6 +292,10 @@ def build():
           f"最宽 {max(m, key=lambda x: x['deg'])['n']} {max(x['deg'] for x in m):.1f}°   "
           f"最窄 {min(m, key=lambda x: x['deg'])['n']} {min(x['deg'] for x in m):.1f}°")
     print(f"词条 {len(payload['lore'])} 条")
+    t = check_terms()
+    print('界表校验通过　各星总度数 '
+          + '　'.join(f'{k} {v}' for k, v in t.items())
+          + f'　合计 {sum(t.values())}')
     print(f"\n  -> {OUT.name}  {OUT.stat().st_size / 1024:.0f} KB")
 
 
