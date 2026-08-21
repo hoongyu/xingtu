@@ -283,7 +283,8 @@ function draw(){
       const p = el('path', { d: arcPath(off(i*30), off(i*30+30), inner, outer) },
                    `sec el-${s.el}`);
       p.addEventListener('click', () => show('sign', i));
-      p.addEventListener('mousemove', e => card(e, s.n + '座', plain ? s.p : s.t));
+      p.addEventListener('mousemove', e => card(e, s.n + '座',
+        `${s.el}象 · ${s.q}宫　主星 ${s.r0}`, plain ? s.p : s.t, DATA.sw[s.n]));
       p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
       const [tx, ty] = pos(off(i*30 + 15), (inner + outer) / 2);
@@ -300,6 +301,16 @@ function draw(){
       const t = el('text', { x: hx, y: hy + 4 }, 'hnum');
       t.textContent = i + 1;
       t.addEventListener('click', () => show('house', i));
+      t.addEventListener('mousemove', ev => {
+        const inside = Object.entries(chart.bodies)
+          .filter(([n, b]) => b.house === i && !['上升','天顶','南交点'].includes(n))
+          .map(([n]) => n);
+        card(ev, `第 ${i + 1} 宫 · ${DATA.houses[i].n}`,
+          `宫头 ${signName(cu)} ${dms(cu)}`,
+          DATA.hw[i + 1],
+          inside.length ? `此盘落入：${inside.join('、')}。` : DATA.hwEmpty);
+      });
+      t.addEventListener('mouseleave', hideCard);
       gSpoke.appendChild(t);
     });
     for (const a of chart.asp){
@@ -308,9 +319,11 @@ function draw(){
       const ln = el('line', { x1: x0, y1: y0, x2: x1, y2: y1 },
                     'asp ' + DATA.aspects.find(d => d.n === a.type).k);
       ln.addEventListener('click', () => show('asp', a));
+      const aw = DATA.aw[a.type];
       ln.addEventListener('mousemove',
         e => card(e, `${a.a} ${a.type} ${a.b}`,
-                  `相差 ${a.exact.toFixed(1)}°，容许 ${a.orb.toFixed(1)}°`));
+          `实际 ${a.exact.toFixed(2)}°　容许 ${a.orb.toFixed(2)}°　${a.moving}`,
+          aw && aw.a, aw && aw.b));
       ln.addEventListener('mouseleave', hideCard);
       gAsp.appendChild(ln);
     }
@@ -321,7 +334,8 @@ function draw(){
                    'sec xiang-' + m.xiang[0]);
       p.addEventListener('click', () => show('xiu', i));
       p.addEventListener('mousemove', e => card(e, m.n + '宿',
-        `${m.xiang}　宿度 ${m.deg.toFixed(1)}°　分野 ${m.guo}·${m.zhou}`));
+        `${m.xiang}　宿度 ${m.deg.toFixed(1)}°　分野 ${m.guo}·${m.zhou}`,
+        m.zhan, DATA.xw));
       p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
       const [tx, ty] = pos(off(m.ra + m.deg / 2), (inner + outer) / 2);
@@ -333,6 +347,9 @@ function draw(){
                                         off(chart.xiuStart + i*30 + 30),
                                         hRing, inner - 6) }, 'ci');
       p.addEventListener('click', () => show('ci', i));
+      p.addEventListener('mousemove', e => card(e, c.n,
+        `十二次　分野 ${c.fen}　含 ${c.xiu}宿`, DATA.cw, DATA.fw));
+      p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
       const [tx, ty] = pos(off(chart.xiuStart + i*30 + 15), (hRing + inner) / 2);
       const t = el('text', { x: tx, y: ty + 4 }, 'cname');
@@ -370,7 +387,9 @@ function draw(){
                                      : `${b.rudu.toFixed(0)}°`;
     g.appendChild(dg);
     g.addEventListener('click', () => show('planet', p.n));
-    g.addEventListener('mousemove', e => card(e, label(p), brief(p.n)));
+    const pw = DATA.pw[p.n];
+    g.addEventListener('mousemove', e => card(e, label(p), brief(p.n),
+      pw && pw.a, pw && pw.b));
     g.addEventListener('mouseleave', hideCard);
     gBody.appendChild(g);
   }
@@ -398,10 +417,12 @@ const key = o => plain ? o.kp : o.kt;
 function brief(name){
   const b = chart.bodies[name];
   if (!b) return '';
+  // 度分格式，跟数据表一致 —— 同一个数在两处印成两种样子最容易让人起疑
   if (mode === 'west')
-    return `${DATA.signs[b.sign].n}座 ${b.deg.toFixed(1)}°　第 ${b.house + 1} 宫`;
+    return `${DATA.signs[b.sign].n} ${dms(b.lon)}　第 ${b.house + 1} 宫`
+         + (b.retro ? '　逆行' : '');
   const m = DATA.mansions[b.xiu];
-  return `${m.n}宿 入宿 ${b.rudu.toFixed(1)}°　${m.xiang}`;
+  return `${m.n}宿 入宿 ${dms(b.rudu % 30)}　${m.xiang}`;
 }
 
 /** 一颗星的合成句：行星给「哪份能力」，星座给「什么底色」，宫位给「哪块地方」。
@@ -1061,9 +1082,14 @@ async function runReading(){
 }
 
 /* ── 悬停卡与面板 ───────────────────────────── */
-function card(e, t, s){
+/* 悬停卡：先前只写「摩羯座 24.09°」，等于把坐标念一遍 ——
+   知道的人不用看，不知道的人看了还是不知道。
+   现在固定回答两个问题：这是什么、为什么跟你有关。 */
+function card(e, t, s, what, why){
   const c = $('card');
-  c.innerHTML = `<div class="cn">${t}</div><div class="cb">${s}</div>`;
+  c.innerHTML = `<div class="cn">${t}</div><div class="cb">${s}</div>`
+    + (what ? `<div class="cw">${what}</div>` : '')
+    + (why ? `<div class="cy">${why}</div>` : '');
   c.classList.add('on');
   const w = c.offsetWidth || 240;
   c.style.left = Math.min(Math.max(e.clientX, w/2 + 8), innerWidth - w/2 - 8) + 'px';

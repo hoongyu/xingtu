@@ -199,6 +199,8 @@ from astro_life import (VENUS_SIGN, MARS_SIGN, MC_SIGN, HOUSE_SOURCE,
                         VENUS_ASPECT, CYCLE_READ, TRANSIT_HOUSE)
 from astro_dignity import (TRIPLICITY, TERMS, TERM_TOTALS, FACES, SCORE,
                            DIGNITY_WHY, CHART_TONE, ELEM_OF)
+from astro_why import (PLANET_WHY, SIGN_WHY, HOUSE_WHY, HOUSE_EMPTY,
+                       ASPECT_WHY, XIU_WHY, CI_WHY, FENYE_WHY)
 
 
 def check_terms():
@@ -277,6 +279,13 @@ def build():
         'why': {k: {'t': v[0], 'p': v[1]} for k, v in DIGNITY_WHY.items()},
         'tone': CHART_TONE,
         'elemOf': ELEM_OF,
+        # 悬停要回答的两个问题：这是什么、为什么跟你有关。
+        'pw': {k: {'a': v[0], 'b': v[1]} for k, v in PLANET_WHY.items()},
+        'sw': SIGN_WHY,
+        'hw': HOUSE_WHY,
+        'hwEmpty': HOUSE_EMPTY,
+        'aw': {k: {'a': v[0], 'b': v[1]} for k, v in ASPECT_WHY.items()},
+        'xw': XIU_WHY, 'cw': CI_WHY, 'fw': FENYE_WHY,
         'aspects': [{'n': n, 'a': a, 'orb': o, 'k': k, 't': t, 'p': p}
                     for n, a, o, k, t, p in ASPECTS],
         'ci': [{'n': n, 'fen': f, 'xiu': x} for n, f, x in CI],
@@ -292,6 +301,14 @@ def build():
           f"最宽 {max(m, key=lambda x: x['deg'])['n']} {max(x['deg'] for x in m):.1f}°   "
           f"最窄 {min(m, key=lambda x: x['deg'])['n']} {min(x['deg'] for x in m):.1f}°")
     print(f"词条 {len(payload['lore'])} 条")
+    for nm, tbl, keys in (
+            ('行星', PLANET_WHY, [p[0] for p in PLANETS]),
+            ('星座', SIGN_WHY, [s0[0] for s0 in SIGNS]),
+            ('宫位', HOUSE_WHY, list(range(1, 13))),
+            ('相位', ASPECT_WHY, [a[0] for a in ASPECTS])):
+        miss = [k for k in keys if k not in tbl]
+        assert not miss, f'{nm}的悬停说明缺这些：{miss}'
+    print('悬停说明覆盖检查通过（行星／星座／宫位／相位各无遗漏）')
     t = check_terms()
     print('界表校验通过　各星总度数 '
           + '　'.join(f'{k} {v}' for k, v in t.items())
