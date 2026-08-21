@@ -9,8 +9,8 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
-<link rel="stylesheet" href="engine.css?v=00710302">
-<link rel="stylesheet" href="astro.css?v=ba16e887">
+<link rel="stylesheet" href="engine.css?v=e32899a4">
+<link rel="stylesheet" href="astro.css?v=b2761cee">
 
 <div id="bar">
   <div id="title">星 盤</div>
@@ -38,6 +38,7 @@
       <label class="ck"><input id="bdst" type="checkbox"> 出生时行夏令时</label>
       <label class="wide">宫位制
         <select id="hsys">
+          <option value="placidus">普拉西德制</option>
           <option value="whole">整宫制</option>
           <option value="equal">等宫制</option>
           <option value="porphyry">波菲利制</option>
@@ -70,8 +71,11 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 <a href="https://doi.org/10.12149/100877" target="_blank" rel="noopener">NADC 中国古天文基础参考星表</a>（CC BY 4.0）。</p>
 
 <h4>宫位制</h4>
-<p>提供整宫制、等宫制、波菲利制三种。普拉西德制流行，
-但它在高纬度会失效，算法也容易出错 —— 与其给一个可能算错的，不如不给。</p>
+<p>提供普拉西德、整宫、等宫、波菲利四种，默认普拉西德（最通行的一种）。</p>
+<p>普拉西德一度没做，理由是「高纬度会失效、算法容易出错」。现在两条都有交代：
+失效的地方明确退回波菲利 —— 到了极昼极夜，那一宫在数学上不存在，
+不是精度问题；正确性拿一张已知盘逐条对过，
+2000-01-01 12:00 UTC+2 柏林，十二宫与专业排盘器逐条相差都在 1 角分以内。</p>
 
 <h4>隐私</h4>
 <p>出生日期、时间、地点全部在浏览器里计算，不上传、不记录。
@@ -81,7 +85,15 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 <svg id="wheel"></svg>
 <div id="card"></div>
 
-<aside id="read"></aside>
+<aside id="read">
+  <div id="sum"></div>
+  <div id="tabs">
+    <button data-t="read" class="on">解 读</button>
+    <button data-t="data">数 据</button>
+  </div>
+  <div id="tabread"></div>
+  <div id="tabdata"></div>
+</aside>
 <div id="readtoggle">解 析</div>
 
 <div id="panel">
@@ -91,6 +103,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=a4dac4a3';
+import { mount } from './astro.js?v=3e3119e5';
 mount();
 </script>

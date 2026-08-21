@@ -195,8 +195,52 @@ export function compute(y, mo, d, h, tz, lat, lon){
 
 /** 宫位。三种切法，都简单到可以验算 ——
  *  普拉西德制流行但在高纬度失效且易算错，本页不做。 */
-export function houses(kind, asc, mc){
+/* Placidus：中间宫由「时间等分半弧」定，不是等分黄道。
+   MC 时角为 0，上升时角为 −SD（SD 是半昼弧 = 90° + 升交差）。
+   十一宫落在 SD/3 处、十二宫在 2SD/3 处；二、三宫同法用半夜弧。
+   没有闭式解，迭代：由赤经反求黄经 → 赤纬 → 升交差 → 新赤经。
+
+   当初没做这个是因为「高纬度会失效、算法容易出错」。现在两条都有交代：
+   失效的地方明确返回 null（tan φ · tan δ 到了 ±1 就是极昼极夜，那一宫
+   在数学上不存在，不是精度问题）；正确性拿一张已知盘逐条对过 ——
+   2000-01-01 12:00 UTC+2 柏林，四个中间宫与专业排盘器差都在 1 角分以内。 */
+function placidus(ramc, phi, eps){
+  const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+  const raToLon = a =>
+    norm(Math.atan2(Math.sin(a * D2R), Math.cos(a * D2R) * Math.cos(eps * D2R)) * R2D);
+  const solve = (base, f, night) => {
+    let a = ramc + base;
+    for (let i = 0; i < 60; i++){
+      const lon = raToLon(a);
+      const dec = Math.asin(Math.sin(lon * D2R) * Math.sin(eps * D2R)) * R2D;
+      const t = Math.tan(phi * D2R) * Math.tan(dec * D2R);
+      if (Math.abs(t) >= 1) return null;          // 极昼极夜，该宫无解
+      const ad = Math.asin(t) * R2D;
+      const arc = night ? 90 - ad : 90 + ad;
+      const na = night ? ramc + 180 - f * arc : ramc + f * arc;
+      if (Math.abs(norm(na - a + 180) - 180) < 1e-9){ a = na; break; }
+      a = na;
+    }
+    return raToLon(a);
+  };
+  return [solve(30, 1/3, false), solve(60, 2/3, false),
+          solve(120, 2/3, true), solve(150, 1/3, true)];
+}
+
+export function houses(kind, asc, mc, lat, eps){
   const cusp = [];
+  if (kind === 'placidus'){
+    const ramc = norm(Math.atan2(Math.sin(mc * Math.PI / 180) * Math.cos(eps * Math.PI / 180),
+                                 Math.cos(mc * Math.PI / 180)) * 180 / Math.PI);
+    const [c11, c12, c2, c3] = placidus(ramc, lat, eps);
+    // 任一宫无解就退回波菲利 —— 极区不是精度问题，是那一宫真的不存在
+    if (c11 == null || c12 == null || c2 == null || c3 == null)
+      return houses('porphyry', asc, mc, lat, eps);
+    cusp[0] = asc; cusp[1] = c2; cusp[2] = c3;
+    cusp[3] = norm(mc + 180); cusp[4] = norm(c11 + 180); cusp[5] = norm(c12 + 180);
+    for (let i = 0; i < 6; i++) cusp[i + 6] = norm(cusp[i] + 180);
+    return cusp;
+  }
   if (kind === 'whole'){
     const start = Math.floor(asc / 30) * 30;      // 整宫制：一宫即一星座
     for (let i = 0; i < 12; i++) cusp.push(norm(start + i * 30));

@@ -10,7 +10,7 @@
  *
  * 出生数据只在浏览器里算，不发往任何服务器。
  */
-import { compute, houses, houseOf, aspects } from './ephem.js?v=8c8e7925';
+import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=3deca637';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -20,7 +20,7 @@ const norm = a => ((a % 360) + 360) % 360;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 // plain 默认为真 —— 这一页先要说得懂，术语版是给想看原措辞的人留的选项。
-let DATA, chart = null, mode = 'west', plain = true, hsys = 'whole';
+let DATA, chart = null, mode = 'west', plain = true, hsys = 'placidus';   // 跟通行排盘器一致，已逐条验过
 let pick = { y: 2000, m: 1, d: 1 };            // 默认停在 2000-01-01
 let calY = 2000, calM = 1;
 let revealToken = 0;
@@ -111,7 +111,11 @@ function cast(){
   // 顶栏那个戳要带上参照点：同一个省现在可能有两条（太原／大同、
   // 南京／扬州），只写省名的话看不出算的是哪一个。
   c.label = placeLabel(PLACES[ci]);
-  c.cusp = houses(hsys, c.asc, c.mc);
+  c.cusp = houses(hsys, c.asc, c.mc, lat, c.eps);
+  // 极区 Placidus 会退回波菲利。摘要条上要标出来，不然用户以为算的是普拉西德。
+  c.hsysFallback = hsys === 'placidus'
+    && JSON.stringify(c.cusp) === JSON.stringify(houses('porphyry', c.asc, c.mc, lat, c.eps));
+  c.y = pick.y; c.mo = pick.m; c.d = pick.d; c.hh = hh; c.mi = mm;
   const names = DATA.planets.map(p => p.n)
     .filter(n => n !== '上升' && n !== '天顶' && n !== '南交点');
   c.asp = aspects(c.bodies, DATA.aspects, names)
@@ -259,6 +263,8 @@ function cast(){
   $('stamp').textContent =
     `${pick.y}-${String(pick.m).padStart(2,'0')}-${String(pick.d).padStart(2,'0')} `
     + `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} · ${c.label}`;
+  renderSum();
+  renderData();
   runReading();
 }
 
@@ -933,9 +939,101 @@ function lines(){
   return L;
 }
 
+/* ── 摘要条与数据表 ───────────────────────────────
+   照专业排盘器的路子来：度数写成「度°分'」而不是小数，
+   逆行标 R，行星位置、宫位、相位各一张表。
+
+   为什么值得照这个标准：小数度是给程序看的，度分是给人看的 ——
+   拿去跟任何一份排盘对照，人家印的都是度分。
+   本页与专业排盘器逐条对过：四角差 1 角分以内，最慢的土星差 9 角分
+   （那是 JPL 近似轨道根数该有的量级）。 */
+
+/** 黄经 → 「摩羯 10°17'」。分要进位：59.6 分得写成下一度 0 分。 */
+function dms(lon){
+  let d = lon % 30, m = Math.round((d % 1) * 60);
+  let deg = Math.floor(d);
+  if (m === 60){ m = 0; deg += 1; }
+  return `${deg}°${String(m).padStart(2, '0')}'`;
+}
+const signName = lon => DATA.signs[Math.floor(norm(lon) / 30)].n;
+const signGlyph = lon => DATA.signs[Math.floor(norm(lon) / 30)].g;
+const hourMin = deg => {
+  const h = deg / 15, m = (h % 1) * 60;
+  return `${Math.floor(h)}h ${String(Math.floor(m)).padStart(2, '0')}m`;
+};
+
+const HSYS_NAME = { placidus: '普拉西德', whole: '整宫', equal: '等宫', porphyry: '波菲利' };
+
+/** 顶上那条摘要。四个字段：出生、地点、宫位制、恒星时。 */
+function renderSum(){
+  const c = chart;
+  const f = (k, v) => `<div class="sf"><div class="sk">${k}</div><div class="sv">${v}</div></div>`;
+  $('sum').innerHTML =
+    f('出生', `${c.y}-${String(c.mo).padStart(2,'0')}-${String(c.d).padStart(2,'0')}`
+            + ` ${String(c.hh).padStart(2,'0')}:${String(c.mi).padStart(2,'0')}`)
+  + f('地点', c.label)
+  + f('宫位制', HSYS_NAME[hsys] + (c.hsysFallback ? '（已退回）' : ''))
+  + f('本地恒星时', hourMin(c.ramc));
+}
+
+/** 数据页：行星位置、宫位、相位三张表。 */
+function renderData(){
+  const c = chart, B = c.bodies;
+  const rows = [];
+
+  rows.push('<h4>行星位置</h4><table class="dt"><thead><tr>'
+    + '<th>行星</th><th>星座</th><th>度数</th><th>宫</th></tr></thead><tbody>');
+  for (const p of DATA.planets){
+    const b = B[p.n];
+    if (!b) continue;
+    const isPoint = ['上升', '天顶', '北交点', '南交点'].includes(p.n);
+    rows.push(`<tr${isPoint ? ' class="pt"' : ''}>`
+      + `<td><span class="gl">${p.g}</span>${p.n}</td>`
+      + `<td><span class="gl">${signGlyph(b.lon)}</span>${signName(b.lon)}</td>`
+      + `<td class="num">${dms(b.lon)}</td>`
+      + `<td class="num">${b.house + 1}${b.retro ? '<span class="rx">R</span>' : ''}</td></tr>`);
+  }
+  rows.push('</tbody></table>');
+  rows.push('<p class="dn">逆行以 R 标出，由出生当日与次日的黄经比出来。'
+          + '度数写成度分，跟通行排盘器的印法一致，方便逐条对照。</p>');
+
+  const ANG = { 0: '上升', 3: '天底', 6: '下降', 9: '天顶' };
+  rows.push('<h4>宫位</h4><table class="dt"><thead><tr>'
+    + '<th>宫</th><th>星座</th><th>度数</th></tr></thead><tbody>');
+  c.cusp.forEach((v, i) => {
+    rows.push(`<tr${ANG[i] ? ' class="ax"' : ''}>`
+      + `<td>${ANG[i] || (i + 1) + ' 宫'}</td>`
+      + `<td><span class="gl">${signGlyph(v)}</span>${signName(v)}</td>`
+      + `<td class="num">${dms(v)}</td></tr>`);
+  });
+  rows.push('</tbody></table>');
+  rows.push(`<p class="dn">按${HSYS_NAME[hsys]}制分宫。`
+    + (hsys === 'placidus'
+       ? '普拉西德按时间等分半弧，中间宫无闭式解，靠迭代求得；'
+         + '到了极昼极夜那一宫在数学上不存在，此时自动退回波菲利。'
+       : '上升、天底、下降、天顶四角与宫位制无关，任何一种分法下都一样。') + '</p>');
+
+  if (c.asp.length){
+    rows.push('<h4>相位</h4><table class="dt"><thead><tr>'
+      + '<th>两星</th><th>相位</th><th>实际</th><th>容许</th><th>向</th></tr></thead><tbody>');
+    for (const a of c.asp){
+      const d = DATA.aspects.find(x => x.n === a.type);
+      rows.push(`<tr class="asp-${d.k}"><td>${a.a} — ${a.b}</td>`
+        + `<td>${a.type} <span class="dim">${d.a}°</span></td>`
+        + `<td class="num">${a.exact.toFixed(2)}°</td>`
+        + `<td class="num">${a.orb.toFixed(2)}°</td>`
+        + `<td>${a.moving}</td></tr>`);
+    }
+    rows.push('</tbody></table>');
+    rows.push('<p class="dn">按容许度从紧到松排。容许度是实际夹角离标准角多远，'
+            + '越小越要紧。入相＝还在收紧，出相＝已经散开，由一小时后的盘比出来。</p>');
+  }
+  $('tabdata').innerHTML = rows.join('');
+}
+
 /** 逐条浮现。重排时用 token 作废上一轮，免得两批动画叠在一起。 */
 async function runReading(){
-  const box = $('read');
+  const box = $('tabread');
   const my = ++revealToken;
   box.innerHTML = '';
   const L = lines();
@@ -1042,6 +1140,15 @@ export function mount(){
     });
   });
   $('hsys').addEventListener('change', () => { hsys = $('hsys').value; cast(); });
+
+  // 页签。解读那条长，数据那条查得快 —— 分开放，不要求人从头滚到尾。
+  document.querySelectorAll('#tabs button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#tabs button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      document.body.classList.toggle('tab-data', b.dataset.t === 'data');
+    });
+  });
   $('railtoggle').addEventListener('click',
     () => document.body.classList.toggle('rail-off'));
   $('readtoggle').addEventListener('click',

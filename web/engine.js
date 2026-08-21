@@ -696,6 +696,37 @@ function toggleRail(force){
 }
 document.getElementById('railtoggle').addEventListener('click', () => toggleRail());
 
+/* ── 进去之后怎么办 ─────────────────────────────
+   反馈是「点开之后不知道怎么操作」。查了一下确实如此：底部那行提示
+   在 body.open 时被整个隐掉，点进星官之后一条引导都不剩，
+   而「点旁边的暗星会跳到那颗星所在的星官」这种事没人猜得到。
+
+   放在面板里而不是屏幕角落 —— 点进去之后眼睛就在面板上。 */
+const guide = document.createElement('div');
+guide.id = 'pguide';
+guide.textContent = CFG.text.guide;
+document.getElementById('panel').appendChild(guide);
+
+/* 头一回来给三行说明，点一下就走，之后不再出现。
+   记在 localStorage 里；隐私上无所谓 —— 存的是「看过了」，不是身份。 */
+if (CFG.text.firstrun && !localStorage.getItem('xingtu-seen')){
+  const fr = document.createElement('div');
+  fr.id = 'firstrun';
+  fr.innerHTML = CFG.text.firstrun.map((t, i) =>
+    `<div class="fl"><b>${i + 1}</b>${t}</div>`).join('')
+    + '<div class="fx">知道了</div>';
+  document.body.appendChild(fr);
+  const dismiss = () => {
+    fr.classList.add('gone');
+    localStorage.setItem('xingtu-seen', '1');
+    setTimeout(() => fr.remove(), 500);
+  };
+  fr.querySelector('.fx').addEventListener('click', dismiss);
+  svg.addEventListener('click', dismiss, { once: true });
+  requestAnimationFrame(() => fr.classList.add('on'));
+  setTimeout(() => fr.classList.add('on'), 60);   // 后台标签页 rAF 不触发，补一手
+}
+
 /* ── 手机与触摸 ─────────────────────────────────
    两件事 CSS 做不到，只能在这里补。
 
