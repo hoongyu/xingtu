@@ -14,7 +14,8 @@ import sys
 
 W = pathlib.Path(__file__).resolve().parents[1] / 'web'
 ASSETS = ['engine.css', 'engine.js', 'sky.config.js', 'concept.config.js',
-          'astro.css', 'astro.js', 'ephem.js', 'places.js']
+          'astro.css', 'astro.js', 'ephem.js', 'places.js',
+          'wenkai-subset.woff2']
 
 
 def digest(name):
@@ -42,7 +43,10 @@ def main():
     # 被依赖的那几个都是叶子（自己不再 import 别的带戳资源），
     # 所以「先改引用、再算哈希」这个顺序仍然成立。
     INNER = [('astro.js', 'ephem.js'), ('astro.js', 'places.js'),
-             ('sky.config.js', 'places.js')]
+             ('sky.config.js', 'places.js'),
+             # 字体在 CSS 里被 @font-face 引用，同样要打戳 ——
+             # 换了字体而 URL 不变的话，长缓存会把旧的锁死
+             ('engine.css', 'wenkai-subset.woff2')]
     for host, dep in INNER:
         hp = W / host
         t = hp.read_text(encoding='utf-8')

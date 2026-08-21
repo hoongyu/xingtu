@@ -48,6 +48,14 @@ jobs:
             exit 1
           fi
 
+      # 字体是裁过的，只含本站用到的那两千来个字。加了新字忘了重裁，
+      # 线上会出方框或退回系统字，而且没有任何报错 —— 挡在这儿。
+      # 这一步不需要源字体（二十四兆），只读已提交的 woff2 核对覆盖。
+      - name: 核对字体子集覆盖全部用字
+        run: |
+          pip install --quiet "fonttools[woff]>=4.50"
+          python scripts/subset_font.py --check
+
       # 指纹漏打是最阴的一种：_headers 给 .js/.css 设了一年 immutable，
       # 漏掉的那个文件会被浏览器永久缓存住，线上改不动，而且没有任何报错。
       #

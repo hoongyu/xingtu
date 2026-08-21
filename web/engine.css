@@ -6,11 +6,24 @@
   --ink-faint:rgba(232,226,212,.16);
   --zhu:#c9503f;
   --gold:#d9b45f;
-  --song:"Songti SC","SimSun","Noto Serif CJK SC",serif;
+  /* 楷体放在末位兜底。Mac 有 Songti SC、Windows 有 SimSun 的话，
+     浏览器根本不会去下这份 woff2 —— 只有前面都没命中时才下载。
+     救的是安卓：那上头往往一个中文衬线体都没有，会退到默认无衬线，
+     古风感当场没了。紫微那页则把它放在首位，因为那页要的就是楷。 */
+  --song:"Songti SC","SimSun","Noto Serif CJK SC","LXGW WenKai Subset",serif;
   --hei:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --kai:"LXGW WenKai Subset","Kaiti SC","KaiTi","STKaiti",serif;
   --ease:cubic-bezier(.22,.92,.24,1);
 }
 *{box-sizing:border-box;margin:0;padding:0}
+/* 霞鹜文楷，SIL OFL 授权，已裁到只剩本站用到的 2207 个字符（480 KB，
+   源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
+@font-face{
+  font-family:"LXGW WenKai Subset";
+  src:url('./wenkai-subset.woff2?v=e9e35fc1') format('woff2');
+  font-weight:400;font-style:normal;font-display:swap;
+}
+
 html,body{height:100%;overflow:hidden}
 body{
   background:var(--void-deep);color:var(--ink);font-family:var(--hei);
