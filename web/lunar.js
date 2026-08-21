@@ -16,7 +16,7 @@
  * 二十分钟内才可能把初一算差一天。已用 1990–2026 年二十九个已知春节
  * 与十个已知闰月逐一核对，全中。
  */
-import { compute } from './ephem.js';
+import { compute } from './ephem.js?v=e6ac781a';
 
 const DAY = 86400000;
 const norm = a => ((a % 360) + 360) % 360;

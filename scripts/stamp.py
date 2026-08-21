@@ -15,7 +15,9 @@ import sys
 W = pathlib.Path(__file__).resolve().parents[1] / 'web'
 ASSETS = ['engine.css', 'engine.js', 'sky.config.js', 'concept.config.js',
           'astro.css', 'astro.js', 'ephem.js', 'places.js',
-          'wenkai-subset.woff2']
+          'wenkai-subset.woff2',
+          'ziwei.css', 'ziwei.js', 'ziwei.page.js', 'ziwei.text.js',
+          'lunar.js', 'gsap.esm.js']
 
 
 def digest(name):
@@ -46,7 +48,11 @@ def main():
              ('sky.config.js', 'places.js'),
              # 字体在 CSS 里被 @font-face 引用，同样要打戳 ——
              # 换了字体而 URL 不变的话，长缓存会把旧的锁死
-             ('engine.css', 'wenkai-subset.woff2')]
+             ('engine.css', 'wenkai-subset.woff2'),
+             ('ziwei.css', 'wenkai-subset.woff2'),
+             ('ziwei.js', 'lunar.js'), ('lunar.js', 'ephem.js'),
+             ('ziwei.page.js', 'gsap.esm.js'), ('ziwei.page.js', 'ziwei.js'),
+             ('ziwei.page.js', 'ziwei.text.js')]
     for host, dep in INNER:
         hp = W / host
         t = hp.read_text(encoding='utf-8')
@@ -57,7 +63,7 @@ def main():
             hp.write_text(t2, encoding='utf-8')
 
     tags = {a: digest(a) for a in ASSETS}
-    for page in ('index.html', 'concept.html', 'astro.html'):
+    for page in ('index.html', 'concept.html', 'astro.html', 'ziwei.html'):
         p = W / page
         s = p.read_text(encoding='utf-8')
         for a, h in tags.items():
@@ -71,7 +77,7 @@ def main():
         print(f'  og:image -> {base}card.png')
     for a, h in tags.items():
         print(f'  {a:<20} {h}')
-    print('\n  已戳进 index.html / concept.html / astro.html')
+    print('\n  已戳进 index.html / concept.html / astro.html / ziwei.html')
 
 
 if __name__ == '__main__':

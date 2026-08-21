@@ -1,0 +1,56 @@
+<meta charset="utf-8">
+<html lang="zh-Hans">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="紫微斗数排盘：农历直接算不抄年表，安紫微对照古法五个定局表逐日核过。方形十二宫，推法有定规，说法是传统。">
+<meta name="theme-color" content="#efe8da">
+<meta property="og:title" content="紫微斗数 · 十二宫排盘">
+<meta property="og:description" content="农历直接算，安紫微逐日核过古法定局表。推法是有定规的，说法是传统的。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>紫微斗数 · 十二宫排盘</title>
+<link rel="stylesheet" href="ziwei.css?v=efe0fcac">
+
+<div id="zbar">
+  <div id="ztitle">紫 微 斗 数</div>
+  <nav id="znav">
+    <a href="index.html">星图</a><a href="concept.html">概念</a>
+    <a href="astro.html">星盘</a><a href="ziwei.html" class="cur">紫微</a>
+  </nav>
+  <div id="zstamp"></div>
+  <div id="zsrcbtn">来 源</div>
+</div>
+
+<aside id="zform">
+  <h3>生 辰</h3>
+  <div id="zcal"></div>
+  <div id="zdstamp"></div>
+  <div class="zrow">
+    <label>时 <input id="zh" type="number" min="0" max="23" value="12"></label>
+    <label>分 <input id="zmin" type="number" min="0" max="59" value="0"></label>
+  </div>
+  <div class="zrow zsex">
+    <label><input type="radio" name="zsex" value="m" checked> 乾造（男）</label>
+    <label><input type="radio" name="zsex" value="f"> 坤造（女）</label>
+  </div>
+  <button id="zcast">起 盘</button>
+  <p class="znote">紫微按农历生辰起盘，本站农历是直接算的，不抄年表。<br>
+    时辰以二十三时起子时计。生辰不离开这台机器。</p>
+  <div id="zlunar"></div>
+</aside>
+<div id="zformtoggle">生 辰</div>
+
+<main id="zgrid"></main>
+
+<aside id="zread"></aside>
+<div id="zreadtoggle">解 读</div>
+
+<div id="zsrc"><div class="zbox"><div id="zsrcclose">关</div>
+<h3>来 源 与 授 权</h3>
+<div id="zsrcbody"></div>
+</div></div>
+
+<script type="module">
+import { mount } from './ziwei.page.js?v=e52399d4';
+mount();
+</script>

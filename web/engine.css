@@ -20,7 +20,7 @@
    源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=e9e35fc1') format('woff2');
+  src:url('./wenkai-subset.woff2?v=a5e5c4a1') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
