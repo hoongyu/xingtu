@@ -202,7 +202,8 @@ from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
 from astro_life import (VENUS_SIGN, MARS_SIGN, MC_SIGN, HOUSE_SOURCE,
                         VENUS_ASPECT, CYCLE_READ, TRANSIT_HOUSE)
 from astro_mirror import (ASC_MIRROR, MOON_MIRROR, SUN_MIRROR,
-                          SATURN_MIRROR, CHART_MIRROR)
+                          SATURN_MIRROR, CHART_MIRROR,
+                          XIU_QIN, XIU_MIRROR, XIANG_MIRROR)
 from astro_dignity import (TRIPLICITY, TERMS, TERM_TOTALS, FACES, SCORE,
                            DIGNITY_WHY, CHART_TONE, ELEM_OF)
 from astro_why import (PLANET_WHY, SIGN_WHY, HOUSE_WHY, HOUSE_EMPTY,
@@ -288,7 +289,13 @@ def build():
         # 术语版的作用是给想看原措辞的人看传统怎么说，
         # 而这一层不是传统的说法，是把那些说法落到「这像不像你」上。
         'mirror': {'asc': ASC_MIRROR, 'moon': MOON_MIRROR, 'sun': SUN_MIRROR,
-                   'saturn': SATURN_MIRROR, 'chart': CHART_MIRROR},
+                   'saturn': SATURN_MIRROR, 'chart': CHART_MIRROR,
+                   # 中式那一半。来路是《宿曜经》与二十八宿值日禽这一支，
+                   # 不是《天官书》那一支 —— 前者本来就论人，后者算国运。
+                   'xiu': XIU_MIRROR,
+                   'qin': {k: {'q': v[0], 'x': v[1]} for k, v in XIU_QIN.items()},
+                   'xiang': {k: {'out': v[0], 'in': v[1]}
+                             for k, v in XIANG_MIRROR.items()}},
         'transitHouse': {k: v[0] for k, v in TRANSIT_HOUSE.items()},
         'transitHouse2': {k: {'t': v[0], 'p': v[1]}
                           for k, v in TRANSIT_HOUSE.items()},
@@ -331,7 +338,11 @@ def build():
             ('上升镜', ASC_MIRROR, [s0[0] for s0 in SIGNS]),
             ('月亮镜', MOON_MIRROR, [s0[0] for s0 in SIGNS]),
             ('太阳镜', SUN_MIRROR, [s0[0] for s0 in SIGNS]),
-            ('土星镜', SATURN_MIRROR, list(range(1, 13)))):
+            ('土星镜', SATURN_MIRROR, list(range(1, 13))),
+            ('宿镜', XIU_MIRROR, list(XIU_QIN)),
+            ('宿禽', XIU_QIN, list(XIU_MIRROR)),
+            ('四象镜', XIANG_MIRROR,
+             ['东方苍龙', '南方朱雀', '西方白虎', '北方玄武'])):
         miss = [k for k in keys if k not in tbl]
         assert not miss, f'{nm}的悬停说明缺这些：{miss}'
     print('词条覆盖检查通过（悬停四组 + 照镜子四组，各无遗漏）')

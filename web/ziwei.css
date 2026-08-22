@@ -35,7 +35,7 @@
    霞鹜文楷，SIL OFL，已裁到只剩本站用到的字。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=4d8d3e4a') format('woff2');
+  src:url('./wenkai-subset.woff2?v=ce5ec795') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -121,10 +121,12 @@ body.zform-off #zform{transform:translateX(-100%)}
   position:fixed;inset:0;width:100%;height:100%;
   z-index:0;pointer-events:none;
 }
-#zling path{fill:none;stroke:var(--mo);stroke-width:1;opacity:.055}
-#zlingfill{opacity:1}
-.zbam{opacity:.1}
-.zbam .zstem{fill:none;stroke:var(--mo);stroke-width:2.2;stroke-linecap:round}
+#zling path{fill:none;stroke:var(--mo);stroke-width:.9;opacity:.05}
+#zling path.zka{opacity:.075;stroke-width:1.1}
+.zbam{opacity:.11}
+.zbam .zstem{fill:none;stroke:var(--mo);stroke-width:2.4;stroke-linecap:round}
+.zbam .zstem2{fill:none;stroke:var(--mo);stroke-width:1.5;stroke-linecap:round;opacity:.7}
+.zbam .znode{fill:none;stroke:var(--mo);stroke-width:1.6;stroke-linecap:round}
 .zbam .zleaf{fill:var(--mo)}
 /* 两丛各占一角，一丛正着一丛翻过来 —— 同一组路径转个身，省一份图形 */
 .zbam-a{transform:translate(2vw,54px) scale(1.35)}
@@ -141,17 +143,16 @@ body.zform-off #zform{transform:translateX(-100%)}
 /* 香炉：中宫底下。烟是 canvas 画的，见 ziwei.page.js。
    摆在文字后面，不挡读 —— 中宫那几行才是内容。 */
 #zcenser{
-  position:absolute;left:50%;bottom:8px;width:132px;height:92px;
+  position:absolute;left:50%;bottom:6px;width:140px;height:110px;
+  overflow:visible;
   transform:translateX(-50%);pointer-events:none;z-index:0;opacity:.5;
 }
-#zcenser path{fill:none;stroke:var(--mo);stroke-width:1.6;
+#zcenser path,#zcenser circle{fill:none;stroke:var(--mo);stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round}
-#zcenser .zbody{fill:rgba(38,34,29,.05)}
-#zcenser .zxiang{stroke:var(--zhu);stroke-width:1.4;opacity:.75}
-#zsmoke{
-  position:absolute;left:0;right:0;bottom:56px;height:62%;
-  pointer-events:none;z-index:0;
-}
+#zcenser .zbowl{fill:rgba(38,34,29,.05)}
+#zcenser .zpan{fill:rgba(38,34,29,.05)}
+/* 烟那一组不描边 —— 它是被滤镜推变形的填充，描边会把分形边缘勾出硬线 */
+#zcenser #zsmoke path{stroke:none}
 
 /* ── 命盘：四乘四，中间二乘二为中宫 ───────────────── */
 #zgrid{
@@ -233,6 +234,18 @@ body.zread-off #zread{transform:translateX(100%)}
 .zr{opacity:0;transform:translateY(8px)}
 .zr.zh{font-size:16.5px;letter-spacing:.22em;color:var(--zhu);
   border-bottom:1px solid var(--jie);padding-bottom:11px;margin-bottom:14px}
+/* 照镜子：依据在上、结论在下。跟星盘那边同一套 ——
+   依据压一档给人核对，结论是这一段的正文。左边一道朱线把它跟
+   后面的分条依据分开：那边是术数，这边是话。 */
+.zr.zm{margin:0 0 18px;padding-left:13px;border-left:2px solid var(--zhu-dim)}
+.zr.zm .zw{
+  font-size:12px;line-height:1.7;color:var(--mo-quiet);margin-bottom:5px;
+  font-variant-numeric:tabular-nums;
+}
+.zr.zm .zw::before{content:'依据　';color:var(--zhu);letter-spacing:.1em}
+.zr.zm .zc{font-size:15px;line-height:2.05;color:var(--mo)}
+.zr.zm .zc::before{content:'所以　';color:var(--zhu);letter-spacing:.1em}
+
 .zr.zk{font-size:13.5px;letter-spacing:.26em;color:var(--mo-quiet);margin:18px 0 8px}
 .zr.zb{margin-bottom:12px}
 .zr.zb .zt{font-size:14.5px;color:var(--mo);margin-bottom:3px}
@@ -298,8 +311,7 @@ body.zread-off #zreadtoggle{right:0}
   /* 中宫在手机上只有一百来像素高，炉子按桌面尺寸摆会把字挤没。
      炉缩到七成，底下留的位置跟着收。 */
   #zcenter{padding:10px 10px 48px}
-  #zcenser{width:92px;height:64px;bottom:5px}
-  #zsmoke{bottom:40px;height:56%}
+  #zcenser{width:100px;height:78px;bottom:4px}
 
   #zread{top:auto;left:0;right:0;bottom:0;width:auto;height:56dvh;
     border-left:none;border-top:1px solid var(--jie);

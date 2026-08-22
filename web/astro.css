@@ -205,12 +205,18 @@ body:not(.read-off) #wheel{padding-right:330px}
 }
 /* 「像不像你」那几条。整页最先被读的东西，字号与亮度都往上提一档，
    左边一道朱线把它跟后面的依据分开 —— 那边是术数，这边是话。 */
-.rl.m{
-  font-size:14.5px;line-height:2.05;color:var(--ink);
-  margin:0 0 16px;padding-left:14px;
-  border-left:2px solid rgba(217,180,95,.5);
-  letter-spacing:.01em;
+.rl.m{margin:0 0 18px;padding-left:14px;border-left:2px solid rgba(217,180,95,.5)}
+/* 依据在上、结论在下，一一对应。
+   依据用等宽数字、压一档亮度 —— 它是给人核对的，不是给人读的；
+   结论才是这一节的正文，所以字号与亮度都在它之上。 */
+.rl.m .mw{
+  font-size:12px;line-height:1.7;color:var(--ink-quiet);
+  letter-spacing:.02em;margin-bottom:5px;
+  font-variant-numeric:tabular-nums;
 }
+.rl.m .mw::before{content:'依据　';color:rgba(217,180,95,.75);letter-spacing:.1em}
+.rl.m .mb{font-size:14.5px;line-height:2.05;color:var(--ink);letter-spacing:.01em}
+.rl.m .mb::before{content:'所以　';color:var(--gold);letter-spacing:.1em}
 .rl.b{margin-bottom:13px}
 .rl.b .rt{
   font-size:13.5px;color:var(--ink);letter-spacing:.03em;margin-bottom:3px;

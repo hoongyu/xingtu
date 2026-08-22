@@ -11,7 +11,8 @@
    能做但会很难读，交给时间轴干净得多。 */
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import { cast, ZHI, GAN } from './ziwei.js?v=14e7fb9d';
-import { PALACE_WHY, STAR_WHY, AUX_WHY, HUA_WHY, JU_WHY, STANCE } from './ziwei.text.js?v=93705896';
+import { PALACE_WHY, STAR_WHY, AUX_WHY, HUA_WHY, JU_WHY, STANCE,
+         STAR_MIRROR, EMPTY_MIRROR } from './ziwei.text.js?v=5cff0907';
 
 const $ = id => document.getElementById(id);
 const CN_D = ['', '初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
@@ -110,17 +111,26 @@ function draw(){
           + `身宫在 <b>${ZHI[c.shen]}</b>　大限 <b>${c.forward ? '顺行' : '逆行'}</b>`
           + `</div>`
           + `<div class="zseal">紫微在 ${ZHI[c.zwPos]}</div>`
-          /* 香炉在中宫底下，烟从三根香上起。摆在文字后面，不挡读。
-             炉是三足双耳的样子，线描，不填色 —— 这一页是纸不是画。 */
-          + `<canvas id="zsmoke"></canvas>`
-          + `<svg id="zcenser" viewBox="0 0 132 92" aria-hidden="true">`
-          + `<path class="zxiang" d="M52 34V12M66 34V6M80 34V13"/>`
-          + `<path class="zbody" d="M32 38 Q32 68 50 76 L82 76 Q100 68 100 38Z"/>`
-          + `<path d="M24 38H108"/>`
-          + `<path d="M24 34 q-10 -3 -10 -11 q0 -8 8 -8 q7 0 7 7"/>`
-          + `<path d="M108 34 q10 -3 10 -11 q0 -8 -8 -8 q-7 0 -7 7"/>`
-          + `<path d="M45 76 l-5 12M66 77 v12M87 76 l5 12"/>`
-          + `<path d="M38 46 Q66 53 94 46"/>`
+          /* 香炉在中宫底下，摆在文字后面，不挡读。
+             形制取博山炉 —— 汉代那一路：底下一只承盘，短柄，
+             豆形的炉身，盖子做成层叠的山，山缝就是出烟的孔。
+             第一版画的是个泛泛的三足鼎，反馈说丑，确实丑：
+             它不像任何一件真东西。博山炉的轮廓是认得出来的，
+             而且「山」这个意思跟这一页也对得上。 */
+          + `<svg id="zcenser" viewBox="0 0 132 104" aria-hidden="true">`
+          + smokeSVG()
+          // 承盘
+          + `<path d="M24 96 Q66 104 108 96 Q66 90 24 96Z" class="zpan"/>`
+          // 短柄
+          + `<path d="M58 90V80 M74 90V80"/>`
+          // 豆形炉身与口沿
+          + `<path class="zbowl" d="M30 58 Q30 82 66 82 Q102 82 102 58Z"/>`
+          + `<path d="M24 58H108"/>`
+          // 山形盖：三层，层与层错开，缝即出烟处
+          + `<path d="M32 58 L41 46 L50 54 L58 42 L66 51 L74 42 L82 54 L91 46 L100 58"/>`
+          + `<path d="M43 48 L51 37 L59 45 L66 34 L73 45 L81 37 L89 48"/>`
+          + `<path d="M54 39 L60 27 L66 18 L72 27 L78 39"/>`
+          + `<circle cx="66" cy="15" r="3.2"/>`
           + `</svg>`;
         g.appendChild(mid);
       }
@@ -157,74 +167,95 @@ function draw(){
   gsap.fromTo('#zcenter',
     { opacity: 0, scale: .97 },
     { opacity: 1, scale: 1, duration: .6, ease: 'power2.out', delay: .5 });
-  smoke();
 }
 
+/* ── 竹枝：按《芥子园画传》的画法算出来，不照印象画 ────────
+   画传里竹叶不是一片一片描的，是一笔撇出来的：起笔按下去、
+   收笔提起来出尖，所以叶子起端钝、末端尖，长宽比十比一上下。
+   成组也有定规 —— 三叶为「个」字，四叶为「介」字，
+   同一组的叶子从一点分出，角度散开而不交叉。
+
+   第一版我是目测着写贝塞尔控制点的，出来是几片胖梭子。
+   现在叶形由长度与角度算：中轴上取三个点，一侧鼓出去、另一侧
+   几乎贴着中轴回来，两条曲线在尖端严格重合 —— 出尖靠的是这个重合。 */
+function leafPath(x, y, ang, len, w){
+  const r = ang * Math.PI / 180;
+  const ux = Math.cos(r), uy = Math.sin(r);     // 中轴方向
+  const nx = -uy, ny = ux;                      // 法线
+  const tipX = x + ux * len, tipY = y + uy * len;
+  // 鼓的一侧：在三分之一处最宽，之后迅速收到尖端
+  const c1x = x + ux * len * .30 + nx * w,      c1y = y + uy * len * .30 + ny * w;
+  const c2x = x + ux * len * .72 + nx * w * .72, c2y = y + uy * len * .72 + ny * w * .72;
+  // 回来的一侧几乎贴着中轴，只留一点点厚度 —— 竹叶不是对称的
+  const c3x = x + ux * len * .66 - nx * w * .16, c3y = y + uy * len * .66 - ny * w * .16;
+  const c4x = x + ux * len * .26 - nx * w * .22, c4y = y + uy * len * .26 - ny * w * .22;
+  const f = n => n.toFixed(1);
+  return `M${f(x)} ${f(y)}C${f(c1x)} ${f(c1y)} ${f(c2x)} ${f(c2y)} ${f(tipX)} ${f(tipY)}`
+       + `C${f(c3x)} ${f(c3y)} ${f(c4x)} ${f(c4y)} ${f(x)} ${f(y)}Z`;
+}
+
+/** 一丛竹。竿带节，三组叶：一「介」两「个」。角度是定的，不随机 ——
+    随机出来的竹叶会互相穿插，那是画传里明说要避的。 */
+function bamboo(g){
+  if (!g || g.childElementCount) return;
+  const add = (d, cls) => {
+    const n = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    n.setAttribute('d', d); n.setAttribute('class', cls); g.appendChild(n);
+  };
+  // 竿：两节微弯，节间画一道短横 —— 竹之所以是竹，一半在节上
+  add('M10 0 C30 46 42 104 38 168', 'zstem');
+  add('M22 34 C36 62 40 96 39 132', 'zstem2');
+  for (const [x, y, w] of [[24, 40, 11], [31, 78, 10], [36, 116, 9], [38, 152, 8]])
+    add(`M${x - w / 2} ${y}h${w}`, 'znode');
+  // 介字：四叶。个字：三叶。角度取画传里常见的散势，两组不同向
+  const CLUSTERS = [
+    [26, 44, [[-32, 74, 7.5], [-6, 88, 8], [16, 70, 7], [40, 52, 6]]],
+    [33, 92, [[-14, 66, 7], [12, 80, 7.5], [38, 58, 6]]],
+    [38, 140, [[4, 58, 6.5], [30, 70, 7], [56, 48, 5.5]]],
+  ];
+  for (const [cx, cy, leaves] of CLUSTERS)
+    for (const [a, len, w] of leaves) add(leafPath(cx, cy, a, len, w), 'zleaf');
+}
 /* ── 香炉上的烟 ──────────────────────────────────
-   为什么用 canvas 而不是 svg 滤镜：feTurbulence 做烟确实像，
-   但要动起来得每帧改 baseFrequency，那是整片区域重新滤波，
-   在手机上很贵。三十来个粒子画成径向渐变的小团，一样是烟，
-   代价小两个数量级。
+   换掉了第一版的 canvas 粒子。粒子那版是几十个径向渐变的圆团，
+   凑近看就是一串泡泡 —— 烟的形状不是团，是被气流揉过的带。
 
-   烟的样子不是随便飘：起点抖动小、越往上越散、越往上越淡，
-   横向用一条慢正弦加一点随机 —— 直着上去像水汽，摆得太厉害像特效。 */
-let smokeTicker = null;
-function smoke(){
-  const cv = $('zsmoke');
-  if (!cv) return;
-  if (smokeTicker){ gsap.ticker.remove(smokeTicker); smokeTicker = null; }
-  const ctx = cv.getContext('2d');
-  const DPR = Math.min(devicePixelRatio || 1, 2);
-  let W = 0, H = 0, ps = [];
-  const N = matchMedia('(max-width: 860px)').matches ? 16 : 30;
+   现在用的是做烟的通行办法：一条竖着的软带当源图，
+   过 feTurbulence 生成分形噪声，再用 feDisplacementMap 拿噪声去
+   推那条带的每个像素 —— 推出来的边缘是分形的，那才像烟。
+   噪声的 baseFrequency 用 SMIL 慢慢变，烟就活了；
+   这一步交给浏览器的滤镜管线，我这边一行每帧的代码都不用写。
 
-  const seed = () => {
-    const r = cv.getBoundingClientRect();
-    W = cv.width = Math.max(1, Math.round(r.width * DPR));
-    H = cv.height = Math.max(1, Math.round(r.height * DPR));
-  };
-  const born = (i) => ({
-    // 三根香，出生点就在那三根的顶上
-    x: W * (0.395 + (i % 3) * 0.105),
-    y: H,
-    r: (3 + Math.random() * 3) * DPR,
-    v: (0.22 + Math.random() * 0.3) * DPR,
-    p: Math.random() * 6.283,
-    w: 0.6 + Math.random() * 0.9,          // 摆动快慢
-    a: 0.055 + Math.random() * 0.05,       // 起始浓度
-    life: 0,
-    span: 240 + Math.random() * 200,
-  });
-  seed();
-  ps = Array.from({ length: N }, (_, i) => {
-    const q = born(i); q.life = Math.random() * q.span; return q;   // 错开，别一起冒
-  });
-
-  const paint = () => {
-    if (!cv.isConnected){ gsap.ticker.remove(paint); smokeTicker = null; return; }
-    if (cv.width !== Math.round(cv.getBoundingClientRect().width * DPR)) seed();
-    ctx.clearRect(0, 0, W, H);
-    for (let i = 0; i < ps.length; i++){
-      const s = ps[i];
-      s.life++;
-      if (s.life > s.span){ ps[i] = born(i); continue; }
-      const t = s.life / s.span;                 // 0→1
-      s.y -= s.v;
-      const drift = Math.sin(s.p + s.life * 0.012 * s.w) * 9 * DPR * t;
-      const x = s.x + drift;
-      const r = s.r * (1 + t * 5.5);             // 越往上越散
-      const a = s.a * (1 - t) * Math.min(1, t * 6);   // 出生时淡入，末了淡出
-      const g = ctx.createRadialGradient(x, s.y, 0, x, s.y, r);
-      g.addColorStop(0, `rgba(38,34,29,${a.toFixed(4)})`);
-      g.addColorStop(1, 'rgba(38,34,29,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, s.y, r, 0, 6.283); ctx.fill();
-    }
-  };
-  // 开了「减少动态」就只留一缕静态的，不动
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches){ paint(); return; }
-  smokeTicker = paint;
-  gsap.ticker.add(paint);
+   代价是滤镜有面积成本，所以整块只有一百三十见方，
+   而且 stdDeviation 压到 1.2 —— 再高手机上会掉帧。 */
+function smokeSVG(){
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return '';
+  return `<defs>
+    <filter id="zsmk" x="-60%" y="-25%" width="220%" height="150%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.022 0.05"
+                    numOctaves="3" seed="11" result="n">
+        <animate attributeName="baseFrequency"
+                 values="0.022 0.05;0.030 0.062;0.019 0.046;0.022 0.05"
+                 dur="19s" repeatCount="indefinite"/>
+      </feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="30"
+                         xChannelSelector="R" yChannelSelector="G"/>
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+    <linearGradient id="zsmkg" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="rgba(38,34,29,.42)"/>
+      <stop offset=".45" stop-color="rgba(38,34,29,.16)"/>
+      <stop offset="1" stop-color="rgba(38,34,29,0)"/>
+    </linearGradient>
+  </defs>
+  <g id="zsmoke" filter="url(#zsmk)" fill="url(#zsmkg)">
+    ${[[52, 3.0, 0], [66, 3.6, -3.5], [80, 2.6, 2.5]].map(([x, w, dx], i) => `
+    <path d="M${x - w} 34 C${x - w * 2 + dx} 4 ${x + w * 2 + dx} -14
+             ${x + dx} -46 C${x - w * 1.4 + dx} -12 ${x + w * 1.6} 6 ${x + w} 34Z">
+      <animateTransform attributeName="transform" type="translate"
+        values="0 6;0 -4;0 6" dur="${7 + i * 2.5}s" repeatCount="indefinite"/>
+    </path>`).join('')}
+  </g>`;
 }
 
 /** 下拉、提示文字、盘上那一格的高亮，三处保持一致。 */
@@ -273,6 +304,38 @@ function read(palace){
 
   const pw = PALACE_WHY[P.name];
   L.push(['zb', '这一宫管什么', pw[0] + pw[1]]);
+
+  /* 照镜子那一段：依据在上，结论在下，一一对应。
+     依据就是这一宫真实的排盘结果 —— 干支、坐了哪几颗主星、有没有四化。
+     说得出「凭什么」，下面那句话才不是算命先生的话术。
+     只有命、夫妻、官禄、财帛四宫写了这一层，其余八宫仍看下面的分条。 */
+  const tbl = STAR_MIRROR[P.name];
+  const mains = P.stars.filter(s => s.kind === '主');
+  if (tbl){
+    L.push(['zk', '像 不 像 你']);
+    if (!mains.length){
+      const opp = c.palaces.find(x => x.zhi === (P.zhi + 6) % 12);
+      const om = opp ? opp.stars.filter(s => s.kind === '主') : [];
+      L.push(['zm',
+        `${P.name}在${ZHI[P.zhi]}（${GAN[P.gan]}${ZHI[P.zhi]}）无主星`
+        + (om.length ? `　借对宫${opp.name}的 ${om.map(s => s.name).join('、')}`
+                     : ''),
+        EMPTY_MIRROR]);
+      for (const s of om)
+        if (tbl[s.name])
+          L.push(['zm', `借${s.name}${s.hua ? `（化${s.hua}）` : ''}`, tbl[s.name]]);
+    } else {
+      for (const s of mains)
+        if (tbl[s.name])
+          L.push(['zm',
+            `${P.name}在${ZHI[P.zhi]}（${GAN[P.gan]}${ZHI[P.zhi]}）坐${s.name}`
+            + (s.hua ? `，${s.name}化${s.hua}` : '')
+            + (mains.length > 1
+               ? `　同宫另有 ${mains.filter(x => x !== s).map(x => x.name).join('、')}`
+               : ''),
+            tbl[s.name]]);
+    }
+  }
 
   if (!P.stars.length){
     L.push(['zk', '空 宫']);
@@ -325,9 +388,10 @@ function read(palace){
 
   box.innerHTML = L.map(([k, a, b]) =>
     k === 'zb' ? `<div class="zr zb"><div class="zt">${a}</div><div class="zd">${b}</div></div>`
+    : k === 'zm' ? `<div class="zr zm"><div class="zw">${a}</div><div class="zc">${b}</div></div>`
                : `<div class="zr ${k}">${a}</div>`).join('');
-  gsap.killTweensOf('#zread .zr');
-  gsap.fromTo('#zread .zr',
+  gsap.killTweensOf('#zbody .zr');
+  gsap.fromTo('#zbody .zr',
     { opacity: 0, y: 8 },
     { opacity: 1, y: 0, duration: .4, ease: 'power2.out', stagger: .04 });
 }
@@ -344,6 +408,9 @@ export function mount(){
     + `target="_blank" rel="noopener">项目地址</a></p>`
     + `<h4>动效</h4><p>GSAP 3.15，GreenSock 标准授权（2025 年 4 月起全部免费）。`
     + `<a href="https://gsap.com/standard-license" target="_blank" rel="noopener">授权条款</a></p>`;
+
+  bamboo(document.querySelector('.zbam-a'));
+  bamboo(document.querySelector('.zbam-b'));
 
   /* 我想问：填选项、接事件。 */
   const zs = $('zaskq');

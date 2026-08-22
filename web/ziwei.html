@@ -9,36 +9,38 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>紫微斗数 · 十二宫排盘</title>
-<link rel="stylesheet" href="ziwei.css?v=bb7c575e">
+<link rel="stylesheet" href="ziwei.css?v=2c7a2583">
 
-<!-- 纸上的三样陈设：窗棂、竹枝、香炉。都压得很淡，是底子不是画面 ——
+<!-- 纸上的陈设：窗棂、竹枝。都压得很淡，是纸纹不是画面 ——
      这一页真正要被读的是十二宫里的字。
-     窗棂用一张 48 见方的 pattern 平铺（步步锦的路子：井字加四角卡子），
-     竹枝两丛各占一角，香炉在中宫底下，烟是 canvas 画的。 -->
+
+     第一版这三样是我照着印象画的，反馈是「自己画的好丑」，属实。
+     找过现成的：Iconify 全库搜「censer」零命中，「incense」只有一个
+     game-icons 的奇幻风图标；stock 站的矢量要么要署名要么要钱；
+     Lottie 得搭一个两百多 K 的运行时，而且现成的烟多是卡通风。
+     所以改成第二条路：**不照印象画，照定规画**。
+     窗棂按真窗的做法用双线（木棂是有厚度的，单线画出来是坐标纸）；
+     竹叶按《芥子园画传》的「个」字「介」字撇，长宽比十比一、收笔出尖，
+     由脚本按角度算出来，不靠我目测；香炉换成博山炉的形制，
+     承盘、短柄、豆形炉身、山形镂空盖，那个轮廓是认得出来的。 -->
 <svg id="zdeco" aria-hidden="true">
   <defs>
-    <pattern id="zling" width="48" height="48" patternUnits="userSpaceOnUse">
-      <path d="M0 0H48M0 24H48M0 0V48M24 0V48
-               M6 6H18M6 6V18 M42 6H30M42 6V18
-               M6 42H18M6 42V30 M42 42H30M42 42V30"/>
+    <pattern id="zling" width="72" height="72" patternUnits="userSpaceOnUse">
+      <!-- 双线：一根木棂两条边。间距 2.5，跟真窗的比例差不多 -->
+      <path d="M0 0H72 M0 2.5H72 M0 36H72 M0 38.5H72
+               M0 0V72 M2.5 0V72 M36 0V72 M38.5 0V72"/>
+      <!-- 四角卡子花，步步锦的做法 -->
+      <path d="M9 9H23 M9 9V23 M29.5 9H15.5 M29.5 9V23
+               M9 29.5H23 M9 29.5V15.5 M29.5 29.5H15.5 M29.5 29.5V15.5"
+            class="zka"/>
+      <path d="M45 45H59 M45 45V59 M65.5 45H51.5 M65.5 45V59
+               M45 65.5H59 M45 65.5V51.5 M65.5 65.5H51.5 M65.5 65.5V51.5"
+            class="zka"/>
     </pattern>
   </defs>
-  <rect id="zlingfill" width="100%" height="100%" fill="url(#zling)"></rect>
-  <g class="zbam zbam-a">
-    <path class="zstem" d="M6 4 C34 42 44 96 40 158"></path>
-    <path class="zstem" d="M6 4 C26 30 30 58 46 84"></path>
-    <path class="zleaf" d="M40 40 C64 30 88 34 106 48 C82 54 58 52 40 40Z"></path>
-    <path class="zleaf" d="M36 62 C58 62 80 74 92 92 C68 90 46 80 36 62Z"></path>
-    <path class="zleaf" d="M44 86 C70 84 92 96 104 116 C78 112 56 102 44 86Z"></path>
-    <path class="zleaf" d="M38 110 C56 118 70 136 74 158 C56 146 42 130 38 110Z"></path>
-    <path class="zleaf" d="M46 26 C64 16 86 14 104 20 C86 32 64 34 46 26Z"></path>
-  </g>
-  <g class="zbam zbam-b">
-    <path class="zstem" d="M6 4 C34 42 44 96 40 158"></path>
-    <path class="zleaf" d="M40 40 C64 30 88 34 106 48 C82 54 58 52 40 40Z"></path>
-    <path class="zleaf" d="M36 62 C58 62 80 74 92 92 C68 90 46 80 36 62Z"></path>
-    <path class="zleaf" d="M44 86 C70 84 92 96 104 116 C78 112 56 102 44 86Z"></path>
-  </g>
+  <rect width="100%" height="100%" fill="url(#zling)"></rect>
+  <g class="zbam zbam-a"></g>
+  <g class="zbam zbam-b"></g>
 </svg>
 
 <div id="zbar">
@@ -88,6 +90,6 @@
 </div></div>
 
 <script type="module">
-import { mount } from './ziwei.page.js?v=e8c2773e';
+import { mount } from './ziwei.page.js?v=93aae851';
 mount();
 </script>

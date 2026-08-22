@@ -859,50 +859,101 @@ function mirror(L){
   const B = chart.bodies, S = DATA.signs;
   const sn = n => S[B[n].sign].n;
   const el = n => S[B[n].sign].el;
-  // 自成一类的行：这一节要比别处显眼，不能挤在 11px 的灰字里 —— 
-  // 它是整页最先被读到的东西。
-  const add = t => t && L.push(['m', t]);
+  /* 每条两截：上截是依据（盘上是什么），下截是结论（所以你……）。
+     反馈原话是「要有理有据，那一盘是什么，下面写所以你是一个什么样子的人」——
+     这一对是这一节能不能站住的关键：光有结论是话术，
+     补上依据它就变成了「从这个位置推出来的一句话」，能追、能反驳。 */
+  const add = (why, t) => t && L.push(['m', why, t]);
 
   L.push(['k', '像 不 像 你', null, null, 'always']);
   L.push(['n', '下面几条不引术语，也不给依据 —— 依据在后面每一节里，'
              + '想追哪条就点哪条。这里只回答一件事：这说的是不是你。']);
 
+  // 依据行：星、座、度、宫，一个不省 —— 这几个数就是上面那一节里的量
+  const at = n => `${n}在${sn(n)} ${B[n].deg.toFixed(1)}°`
+    + (['上升', '天顶'].includes(n) ? ''
+       : ` · 第 ${B[n].house + 1} 宫（${DATA.houses[B[n].house].n}）`);
+  const ASC = () => add(at('上升'), M.asc[sn('上升')]);
+  const SUN = () => add(at('太阳'), M.sun[sn('太阳')]);
+  const MOON = () => add(at('月亮'), M.moon[sn('月亮')]);
+  const SAT = () => add(at('土星'),
+    M.saturn[B['土星'].house + 1]);
+
   const T = topic;
   if (T === 'all' || T === 'me'){
-    add(M.asc[sn('上升')]);
-    add(M.sun[sn('太阳')]);
-    add(M.moon[sn('月亮')]);
+    ASC(); SUN(); MOON();
     // 结构性的那几条：比单颗星更容易让人认领，因为它说的是矛盾
     if (el('太阳') === el('月亮'))
-      add(M.chart.sun_moon_same.replace('{elem}', el('太阳')));
+      add(`太阳与月亮同属${el('太阳')}象（${sn('太阳')}／${sn('月亮')}）`,
+          M.chart.sun_moon_same.replace('{elem}', el('太阳')));
     else
-      add(M.chart.sun_moon_clash
+      add(`太阳在${sn('太阳')}（${el('太阳')}象）　月亮在${sn('月亮')}（${el('月亮')}象）`,
+          M.chart.sun_moon_clash
             .replace('{sun}', sn('太阳')).replace('{moon}', sn('月亮')));
-    if (sn('上升') === sn('太阳')) add(M.chart.asc_sun_same);
+    if (sn('上升') === sn('太阳'))
+      add(`上升与太阳同在${sn('太阳')}`, M.chart.asc_sun_same);
     const below = Object.entries(B)
       .filter(([n, b]) => !['上升','天顶','北交点','南交点'].includes(n))
       .filter(([, b]) => b.house <= 5).length;
-    add(below >= 6 ? M.chart.below : below <= 3 ? M.chart.above : null);
+    if (below >= 6) add(`十星中 ${below} 颗落在一至六宫（地平线以下）`, M.chart.below);
+    else if (below <= 3) add(`十星中 ${10 - below} 颗落在七至十二宫（地平线以上）`,
+                             M.chart.above);
   } else if (T === 'love'){
-    add(M.moon[sn('月亮')]);
-    add(dg(DATA.venus[sn('金星')]) + '。');
-    add(M.asc[sn('上升')]);
+    MOON();
+    add(`金星在${sn('金星')} ${B['金星'].deg.toFixed(1)}° · 第 ${B['金星'].house + 1} 宫`,
+        dg(DATA.venus[sn('金星')]) + '。');
+    ASC();
   } else if (T === 'work'){
-    add(M.sun[sn('太阳')]);
-    add(dg(DATA.mc[chart.mcSign]) + '。');
-    add(M.saturn[B['土星'].house + 1]);
+    SUN();
+    add(`天顶在${chart.mcSign} ${(chart.mc % 30).toFixed(1)}°`,
+        dg(DATA.mc[chart.mcSign]) + '。');
+    SAT();
   } else if (T === 'money'){
-    add(M.saturn[B['土星'].house + 1]);
-    add(M.sun[sn('太阳')]);
+    SAT(); SUN();
   } else if (T === 'hard'){
-    add(M.saturn[B['土星'].house + 1]);
+    SAT();
     const per = ['太阳','月亮','水星','金星','火星','木星','土星']
       .filter(n => dignitiesOf(n).hits.some(h => h[0] === '游离'));
-    if (per.length >= 5) add(M.chart.peregrine);
-    add(M.asc[sn('上升')]);
+    if (per.length >= 5)
+      add(`七政中 ${per.length} 颗游离（${per.join('、')}）`, M.chart.peregrine);
+    ASC();
   } else if (T === 'when'){
-    add(M.saturn[B['土星'].house + 1]);
+    SAT();
   }
+}
+
+/* 中式盘的镜子。
+   这一半改口吻时特意留白过一轮，理由写在 astro_mirror.py 里：
+   《天官书》那一支占的是国运，把「主朝会、主兵」写成「你会打仗」是编造。
+   但「二十八宿看人」另有来路 —— 唐不空译《宿曜经》那一支本来就论人，
+   后世的值日禽（角木蛟、亢金龙……）配上五行禽兽，民间据此论性情。
+   所以这一节标的是《宿曜经》与值日禽，不跟占辞那一支混。 */
+function mirrorCN(L){
+  const M = DATA.mirror;
+  if (!M || !M.xiu) return;
+  const B = chart.bodies, MS = DATA.mansions;
+  const xi = n => MS[B[n].xiu];
+  const add = (why, t) => t && L.push(['m', why, t]);
+
+  L.push(['k', '像 不 像 你　【传·宿曜】', null, null, 'always']);
+  L.push(['n', '这一节的来路跟上面的占辞不是同一支：'
+             + '占辞出自《天官书》一路，算的是国运；'
+             + '论人的那一支是唐开元年间不空译的《宿曜经》，'
+             + '以及后世给每一宿配五行与禽兽的值日禽（角木蛟、亢金龙……）。'
+             + '两支分开标，别混。']);
+
+  const cite = n => {
+    const m = xi(n), q = M.qin[m.n];
+    return `${n}临${m.n}宿 入宿 ${B[n].rudu.toFixed(1)}°`
+         + `　${m.xiang}　${m.n}${q.x}${q.q}　${m.zhan}`;
+  };
+  const am = xi('上升'), aq = M.qin[am.n];
+  add(`命宫在${am.n}宿 入宿 ${B['上升'].rudu.toFixed(1)}°`
+      + `　${am.xiang}　${am.n}${aq.x}${aq.q}　${am.zhan}`,
+      M.xiu[am.n]);
+  const sx = M.xiang[xi('太阳').xiang], mx = M.xiang[xi('月亮').xiang];
+  if (sx) add(cite('太阳'), sx.out);
+  if (mx) add(cite('月亮'), mx.in);
 }
 
 function lines(){
@@ -1213,7 +1264,9 @@ function lines(){
     L.push(['h', '中 式 盘 · 七 政 四 余']);
     L.push(['n', '同一批行星，换一套坐标：西洋按黄道分十二宫（等分 30 度），'
                + '这里按赤道分二十八宿（宿度不等，井 32.2 度、觜 1.4 度）。'
-               + '中国星占的落点在「主何事」，不在性格 —— 底下的占辞都是这个路子。']);
+               + '中国星占的落点在「主何事」，不在性格 —— 底下的占辞都是这个路子；'
+               + '论人的说法另有来路，见下一节。']);
+    mirrorCN(L);
     sky();
 
     const am = M[B['上升'].xiu];
@@ -1419,6 +1472,10 @@ async function runReading(){
     row.className = 'rl ' + kind + (tap ? ' tapable' : '') + (instant ? ' in' : '');
     row.innerHTML = kind === 'b'
       ? `<div class="rt">${a}</div><div class="rb">${b}</div>`
+      : kind === 'm'
+      /* 镜子那一节是两行：上面写依据（盘上是什么），下面写结论（所以你……）。
+         一一对应 —— 说得出凭什么，这一段才不是算命先生的话术。 */
+      ? `<div class="mw">${a}</div><div class="mb">${b}</div>`
       : a;
     // 手机上盘上那些点太小按不中，条目本身就是入口
     if (tap) row.addEventListener('click', () => show(tap[0], tap[1]));
