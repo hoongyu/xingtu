@@ -93,6 +93,26 @@ function build(){
   const nodeOf = new Map();
   let lostCount = 0;
 
+  /* 闪动只给最亮的一批。
+     量出来的事实：全天图上 1386 颗星每颗挂一条 infinite 的 opacity
+     关键帧，加上 419 条星官轮廓在呼吸，document.getAnimations()
+     数到 1814 个动画同时在跑。改完是 659。
+
+     没有量到的事实：帧率。开发时预览窗没在合成，rAF 不触发，
+     测不了 —— 所以这里不写「快了多少」，只写动画数。
+     判断依据是另一条：SVG 元素上的 opacity 动画进不了合成层，
+     每帧都要走样式与绘制，不像 HTML 层的 opacity 那样白拿。
+
+     视觉代价接近零：暗星本来就闪不出什么（--o 只有 0.3 上下，
+     再乘 0.38 的落差不到十分之一档）。
+     概念图只有 161 个点，够不到这个上限，等于不受影响。 */
+  const TWINKLE_MAX = 240;
+  const twinkling = new Set(
+    [...used]
+      .filter(h => CFG.visible(stars[h], tierV))     // 地平线下的本来就压到 .12
+      .sort((a, b) => CFG.dim(stars[b]) - CFG.dim(stars[a]))
+      .slice(0, TWINKLE_MAX));
+
   for (const hip of used){
     const f = stars[hip];
     const [x, y] = project(f[0], f[1]);
@@ -102,12 +122,18 @@ function build(){
     const c = document.createElementNS(NS,'circle');
     c.setAttribute('cx', x); c.setAttribute('cy', y);
     c.setAttribute('r', starRadius(f));
-    c.setAttribute('class','star twinkle');
+    c.setAttribute('class', twinkling.has(hip) ? 'star twinkle' : 'star');
     c.style.setProperty('--o', below ? .12 : CFG.dim(f));
     const [dur, del] = CFG.phase(hip);
     c.style.setProperty('--dur', dur.toFixed(2) + 's');
     c.style.setProperty('--del', del.toFixed(2) + 's');
-    if (below) c.style.fill = 'rgba(201,80,63,.5)';
+    /* 星图上这抹暗红的意思是「在你那儿它落到地平线以下，看不见」——
+       是天象事实。概念图借了同一套渲染，于是「难度超出当前档」的概念
+       也被涂成同一个红：入门档下 161 个概念里有 73 个是红的，
+       近一半的图看起来像是报错或禁区。那不是这张图想说的话。
+       颜色改由配置给：星图仍是红，概念图用一抹冷蓝，
+       意思从「不可见」变回「更远处」。 */
+    if (below) c.style.fill = CFG.belowFill || 'rgba(201,80,63,.5)';
     gStar.appendChild(c);
     nodeOf.set(hip, c);
 
@@ -556,6 +582,14 @@ CFG.tiers.forEach(([n], i) => {
   o.value = i; o.textContent = n; sel_site.appendChild(o);
 });
 sel_site.value = site;
+/* 下拉前面补一个标签。原来右上角只有一个写着「北京」或「入门」的选择框，
+   它到底在筛什么，界面上没有任何字说明 —— 概念图上尤其费解。 */
+if (CFG.text.siteLabel){
+  const lb = document.createElement('span');
+  lb.className = 'sitelab';
+  lb.textContent = CFG.text.siteLabel;
+  sel_site.parentNode.insertBefore(lb, sel_site);
+}
 sel_site.addEventListener('change', () => { if (sel) close(); site = +sel_site.value; build(); });
 
 addEventListener('resize', () => { if (!sel) build(); });

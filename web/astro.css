@@ -1,7 +1,45 @@
 /* 星盘页专用样式。基色与版式沿用 engine.css，这里只加盘面与表单。 */
 
-#wheel{display:block;width:100vw;height:100vh}
+/* ── 盘面台架 ─────────────────────────────────────
+   #wheel 从一张 svg 变成一个有透视的台面，里头叠三层：
+   相位线沉下去、宫圈在中层、行星浮上来。三层各带 translateZ，
+   倾斜时会真的错开 —— 这是这一页唯一的「3D」，而且是浏览器
+   自己做的透视投影，不引任何库。
+
+   为什么不上 three.js：把这张盘搬进 WebGL 等于重写命中测试、
+   中文字形渲染（要 SDF 图集，那 491KB 的子集字体就白做了）、
+   悬停卡与可访问性。168KB gzip 换来的是「重做一遍」，不是「升级」。
+   CSS 的 perspective 本来就是真透视，还留着整棵 DOM 可点。
+
+   translateZ 会顺带把层放大（近大远小），不补偿的话行星会比
+   它该在的宫位偏出去 4%。每层反向缩放 (P−z)/P 抵消掉：
+   静止时三层严丝合缝，一倾斜才分开。 */
+#wheel{
+  position:fixed;inset:0;z-index:0;
+  perspective:1500px;perspective-origin:50% 47%;
+  pointer-events:none;          /* 空处的点击要落到 body 上，见下 */
+}
 body:not(.rail-off) #wheel{padding-left:212px}
+/* transform 交给 GSAP 全权拥有，CSS 这里不写 —— 两边都写会打架。
+   preserve-3d 必须留在 CSS：它不是可动画属性。
+   另外注意别给 #deck 上 opacity，opacity<1 会把 preserve-3d 压平，
+   三层就贴回同一个面了 —— 淡入放在每层里面的 svg 上。 */
+#deck{position:absolute;inset:0;transform-style:preserve-3d;will-change:transform;
+  pointer-events:none}
+.lay{position:absolute;inset:0;pointer-events:none}
+.lay>svg{display:block;width:100%;height:100%;overflow:visible}
+#lay-asp{transform:translateZ(-80px) scale(1.05333)}
+#lay-ring{transform:translateZ(0)}
+#lay-body{transform:translateZ(80px) scale(.94667)}
+/* pointer-events 是继承属性：台架与三层都设成 none，只有下面这几类
+   图元显式收回 auto。不这么写的话，最上层那张铺满全屏的 svg 会把
+   宫圈层和相位层整个挡死；而台面本身也不该吃点击 ——
+   手机上侧栏展开时靠「点空处」收起，那一下要落到 body 上。 */
+.lay .sec,.lay .ci,.lay .hnum,.lay .asp,.lay .body{pointer-events:auto}
+
+/* 背景星尘。一张 canvas，不是 1400 个会动的 DOM 节点 ——
+   星图页那边正是那么做的，代价见 README。 */
+#dust{position:fixed;inset:0;z-index:0;display:block;pointer-events:none}
 
 /* ── 盘面 ───────────────────────────────────────── */
 .sec{stroke:rgba(232,226,212,.14);stroke-width:.7;cursor:pointer;
@@ -39,7 +77,9 @@ body:not(.rail-off) #wheel{padding-left:212px}
   font-family:var(--song);letter-spacing:.18em;pointer-events:none}
 
 .body{cursor:pointer}
-.bdot{fill:rgba(5,7,12,.92);stroke:rgba(217,180,95,.55);stroke-width:1}
+.bdot{fill:rgba(5,7,12,.92);stroke:rgba(217,180,95,.55);stroke-width:1;
+  filter:drop-shadow(0 0 5px rgba(217,180,95,.45))}
+.body:hover .bdot{filter:drop-shadow(0 0 12px rgba(217,180,95,.9))}
 .body:hover .bdot{fill:var(--gold)}
 .bglyph{font-size:17px;fill:var(--ink);text-anchor:middle;pointer-events:none;
   font-family:var(--hei)}
@@ -81,13 +121,6 @@ body:not(.rail-off) #wheel{padding-left:212px}
 }
 
 /* ── 顶栏 ───────────────────────────────────────── */
-#plain{
-  font-family:var(--song);font-size:12px;letter-spacing:.2em;
-  color:var(--ink-dim);border:1px solid var(--ink-faint);
-  padding:5px 12px;cursor:pointer;transition:all .3s ease;
-}
-#plain:hover{color:var(--gold);border-color:rgba(217,180,95,.4)}
-#plain.on{color:var(--void);background:var(--gold);border-color:var(--gold)}
 #stamp{font-size:11px;color:var(--ink-dim);letter-spacing:.08em;
   font-variant-numeric:tabular-nums}
 #card .cn{font-family:var(--song);font-size:15px;letter-spacing:.1em;margin-bottom:5px}
@@ -171,6 +204,17 @@ body:not(.read-off) #wheel{padding-right:330px}
   border-top:1px solid rgba(232,226,212,.08);
 }
 
+/* 逐条浮现时露出来的跳过口。没有它的话，逐条播是「只能等」——
+   等几秒还没处可点，本身就是个体验缺陷。 */
+#skipall{
+  position:sticky;bottom:0;margin:14px -22px -60px;padding:11px 0 13px;
+  text-align:center;font-family:var(--song);font-size:11px;letter-spacing:.28em;
+  color:var(--ink-dim);cursor:pointer;display:none;
+  background:linear-gradient(to top,rgba(5,7,12,.99) 55%,rgba(5,7,12,0));
+}
+#skipall:hover{color:var(--gold)}
+body.revealing:not(.tab-data) #skipall{display:block}
+
 #readtoggle{
   position:fixed;right:0;top:50%;z-index:31;transform:translateY(-50%);
   writing-mode:vertical-rl;font-family:var(--song);font-size:12px;
@@ -227,7 +271,7 @@ body:not(.read-off) #readtoggle{right:330px}
     z-index:32;background:rgba(5,7,12,.94);
   }
 
-  /* 排盘时间戳在手机顶栏里太长，会把「來源」挤出屏幕。
+  /* 排盘时间戳在手机顶栏里太长，会把「来源」挤出屏幕。
      这个信息在解析栏顶部也有，这里省掉不丢东西。 */
   #stamp{display:none}
 
@@ -296,6 +340,24 @@ body:not(.read-off) #readtoggle{right:330px}
 .sk{font-size:9.5px;letter-spacing:.16em;color:var(--ink-faint);margin-bottom:3px}
 .sv{font-size:12px;color:var(--ink);letter-spacing:.03em;
   font-variant-numeric:tabular-nums}
+
+/* ── 口吻开关 ─────────────────────────────────────
+   原来是顶栏上一个按钮，写着「术语」或「说人话」。
+   反馈是「我都不知道要点这个」—— 合理：单钮上那个词到底是
+   当前状态还是点完会变成的状态，界面上没有任何东西能说明。
+   两个按钮就没这个歧义，哪个亮着就是哪个。
+
+   位置也挪了。它管的是这一栏的文字，就放在文字上头，
+   而不是屏幕另一端的顶栏里。 */
+#voice{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+#voice .vl{
+  font-family:var(--song);font-size:10px;letter-spacing:.24em;
+  color:var(--ink-faint);flex:none;
+}
+#plainseg{flex:1;border-color:rgba(232,226,212,.14)}
+#plainseg button{flex:1;font-size:11.5px;letter-spacing:.16em;padding:6px 0}
+#plainseg button.on{background:rgba(217,180,95,.9);color:var(--void)}
+body.tab-data #voice{display:none}
 
 #tabs{display:flex;gap:1px;margin-bottom:16px;background:rgba(232,226,212,.08)}
 #tabs button{

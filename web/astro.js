@@ -12,6 +12,7 @@
  */
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=3deca637';
+import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
@@ -260,6 +261,7 @@ function cast(){
 
   chart = c;
   draw();
+  flyIn();
   $('stamp').textContent =
     `${pick.y}-${String(pick.m).padStart(2,'0')}-${String(pick.d).padStart(2,'0')} `
     + `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} · ${c.label}`;
@@ -270,11 +272,18 @@ function cast(){
 
 /* ── 画盘 ───────────────────────────────────── */
 function draw(){
-  const svg = $('wheel');
-  svg.innerHTML = '';
-  svg.setAttribute('viewBox', `${-R*1.18} ${-R*1.18} ${R*2.36} ${R*2.36}`);
+  /* 三张 svg 叠在一起，viewBox 完全相同，所以坐标一套通用；
+     差别只在各自的 translateZ。一层画相位、一层画宫圈、一层画行星，
+     倾斜时它们会真的错开。原来是一张 svg 四个 g，改动只在这几行。 */
+  const vb = `${-R*1.18} ${-R*1.18} ${R*2.36} ${R*2.36}`;
+  const lay = id => {
+    const sv = $(id).firstElementChild;
+    sv.innerHTML = ''; sv.setAttribute('viewBox', vb); return sv;
+  };
   const gRing = el('g'), gSpoke = el('g'), gAsp = el('g'), gBody = el('g');
-  svg.append(gAsp, gRing, gSpoke, gBody);
+  lay('lay-asp').append(gAsp);
+  lay('lay-ring').append(gRing, gSpoke);
+  lay('lay-body').append(gBody);
 
   const outer = R, inner = R * .84, hRing = R * .70, ringP = R * .77;
 
@@ -335,7 +344,7 @@ function draw(){
       p.addEventListener('click', () => show('xiu', i));
       p.addEventListener('mousemove', e => card(e, m.n + '宿',
         `${m.xiang}　宿度 ${m.deg.toFixed(1)}°　分野 ${m.guo}·${m.zhou}`,
-        m.zhan, DATA.xw));
+        zhanOf(m), DATA.xw));
       p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
       const [tx, ty] = pos(off(m.ra + m.deg / 2), (inner + outer) / 2);
@@ -375,6 +384,7 @@ function draw(){
     placed.push(a);
     const [x, y] = pos(a, ringP);
     const g = el('g', {}, 'body');
+    g.dataset.x = x.toFixed(2); g.dataset.y = y.toFixed(2);
     g.appendChild(el('circle', { cx: x, cy: y, r: HIT, fill: 'transparent' }));
     g.appendChild(el('circle', { cx: x, cy: y, r: DOT }, 'bdot'));
     const t = el('text', { x, y: y + 7 }, 'bglyph');
@@ -410,9 +420,175 @@ function draw(){
   }
 }
 
+/* ── 起盘动画与盘面深度 ─────────────────────────
+   反馈是「动效和体验很不好」。之前这一页确实一点动效都没有：
+   点「排盘」，盘就那么出现了，跟刷新一张图片没区别 ——
+   而这恰恰是整页最该有分量的一刻。
+
+   为什么不上 three.js。想过，查过，结论是不划算：
+   把这张盘搬进 WebGL 要重做命中测试、中文字形渲染（得先烘一套
+   SDF 图集，那 491KB 的子集字体就白裁了）、悬停卡与可访问性。
+   168KB gzip 换来的是「重写一遍」，不是「升级」。
+   而 CSS 的 perspective 本来就是真的透视投影，GPU 合成，
+   整棵 DOM 还留着能点 —— 三层各带 translateZ，一倾斜就真错开。
+   所以这里的 3D 是真 3D，只是不经过 WebGL。
+
+   两个坑记下来：
+   · 别给 #deck 加 opacity。opacity<1 会把 preserve-3d 压平，
+     三层立刻贴回同一个面 —— 淡入只能放在每层里面的 svg 上。
+   · translateZ 会顺带近大远小，行星层会比宫圈层胀 5%。
+     每层反向缩放 (P−z)/P 抵掉，静止时严丝合缝。 */
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
+let flyTl = null, tilting = false, paraBound = false;
+
+/** 量出描边长度写进 dasharray，再把 offset 拉到满 —— 线就藏起来了，
+    动画把 offset 收回 0 的过程看起来就是「自己画出来」。 */
+function armStroke(sel){
+  const list = [...document.querySelectorAll(sel)];
+  for (const e of list){
+    const L = e.getTotalLength ? e.getTotalLength() : 0;
+    e.style.strokeDasharray = L;
+    e.style.strokeDashoffset = L;
+  }
+  return list;
+}
+const disarm = list => { for (const e of list){
+  e.style.strokeDasharray = ''; e.style.strokeDashoffset = '';
+} };
+
+/** 把盘恢复成「就该长这样」的静止态。动画跳过时走这条。 */
+function restWheel(){
+  gsap.set('#deck', { clearProps: 'all' });
+  gsap.set('.lay>svg', { opacity: 1 });
+  gsap.set('.sec,.ci,.glyph,.xname,.cname,.hnum,.mark,.body',
+           { clearProps: 'opacity,scale,transform,transformOrigin' });
+  disarm([...document.querySelectorAll('.gui,.spoke,.asp')]);
+}
+
+function flyIn(fast){
+  if (flyTl){ flyTl.kill(); flyTl = null; }
+  /* 后台标签页里 rAF 不触发，GSAP 的时钟也就不走 —— 那样盘会永远
+     停在起始帧（倾着、透明），切回来才补播。这一页宁可不演。
+     同一个坑在解析栏那边踩过一次，见 runReading 里的注释。 */
+  if (REDUCED.matches || document.hidden){ restWheel(); tilting = false; return; }
+
+  const rings  = armStroke('#lay-ring .gui');
+  const spokes = armStroke('#lay-ring .spoke');
+  const asps   = armStroke('#lay-asp .asp');
+  tilting = true;
+
+  /* 起始态同步落定，不放进时间轴。放进去的话第一帧之前盘已经是
+     成品状态，会先闪一下正的再倒回去演 —— 时间轴的 set 是在
+     第一次 tick 时才执行的，而那已经隔了一帧。 */
+  gsap.set('#deck', { rotationX: 74, rotationZ: -13, scale: .84 });
+  gsap.set('.lay>svg', { opacity: 0 });
+  gsap.set('.sec,.ci,.glyph,.xname,.cname,.hnum,.mark,.body', { opacity: 0 });
+
+  flyTl = gsap.timeline({
+    onComplete(){
+      // dash 留着不清，相位线悬停加粗时会露出接缝
+      disarm([...rings, ...spokes, ...asps]);
+      tilting = false;
+      bindTilt();
+    },
+  });
+  if (fast) flyTl.timeScale(2.1);
+
+  flyTl
+    // 台面亮起来
+    .to('.lay>svg', { opacity: 1, duration: .3, ease: 'none' }, 0)
+    // 三道圈自己画出来
+    .to(rings, { strokeDashoffset: 0, duration: .85, ease: 'power2.inOut',
+                 stagger: .08 }, 0)
+    // 盘从近乎平躺立起来 —— 这一下是整段的主干，别的都挂在它上面
+    .to('#deck', { rotationX: 0, rotationZ: 0, scale: 1,
+                   duration: 1.5, ease: 'power3.out' }, .08)
+    // 宫格依次显影，再从圆心抽出宫界线
+    .to('.sec,.ci', { opacity: 1, duration: .5, stagger: .026 }, .3)
+    .to(spokes, { strokeDashoffset: 0, duration: .5, ease: 'power2.out',
+                  stagger: .02 }, .45)
+    .to('.glyph,.xname,.cname,.hnum,.mark',
+        { opacity: 1, duration: .45, stagger: .016 }, .62)
+    // 行星最后落位，一颗一颗弹进宫里。缩放原点取各自的圆心 ——
+    // 用 bbox 会被旁边那行度数标签拽偏。
+    .fromTo('.body',
+      { opacity: 0, scale: .22,
+        svgOrigin: (i, t) => t.dataset.x + ' ' + t.dataset.y },
+      { opacity: 1, scale: 1, duration: .5, ease: 'back.out(2.6)',
+        stagger: .05 }, .95)
+    // 相位线最后连起来：先有星，才谈得上星与星之间
+    .to(asps, { strokeDashoffset: 0, duration: .7, ease: 'power1.out',
+                stagger: .018 }, 1.3);
+}
+
+/* 鼠标带着盘轻微转头。幅度压得很小（左右 13 度、上下 9 度）——
+   再大就成了摇晃，读不了度数。触屏与 reduced-motion 不装。 */
+function bindTilt(){
+  if (paraBound || REDUCED.matches || matchMedia('(hover: none)').matches) return;
+  paraBound = true;
+  const ry = gsap.quickTo('#deck', 'rotationY', { duration: .9, ease: 'power2.out' });
+  const rx = gsap.quickTo('#deck', 'rotationX', { duration: .9, ease: 'power2.out' });
+  addEventListener('pointermove', e => {
+    if (tilting) return;                       // 起盘动画正在用同一个 transform
+    ry((e.clientX / innerWidth - .5) * 13);
+    rx((.5 - e.clientY / innerHeight) * 9);
+  }, { passive: true });
+}
+
+/* 背景星尘。一张 canvas 画一百来个点，不是一千四百个会动的 DOM 节点 ——
+   星图那一页正是后者，代价实测在 README 里。 */
+function dust(){
+  const cv = $('dust');
+  const ctx = cv.getContext('2d');
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  const N = narrow.matches ? 80 : 165;
+  let W = 0, H = 0, stars = [];
+
+  function seed(){
+    W = cv.width = Math.round(innerWidth * DPR);
+    H = cv.height = Math.round(innerHeight * DPR);
+    cv.style.width = innerWidth + 'px';
+    cv.style.height = innerHeight + 'px';
+    ctx.fillStyle = 'rgb(232,226,212)';
+    stars = Array.from({ length: N }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      r: (Math.random() ** 2.2 * 1.5 + .35) * DPR,
+      o: Math.random() * .42 + .12,
+      s: Math.random() * .9 + .25,
+      p: Math.random() * 6.283,
+      vx: (Math.random() - .5) * .03 * DPR,
+      vy: (Math.random() - .5) * .03 * DPR,
+    }));
+  }
+  function paint(t){
+    ctx.clearRect(0, 0, W, H);
+    for (const s of stars){
+      s.x += s.vx; s.y += s.vy;
+      if (s.x < 0) s.x += W; else if (s.x > W) s.x -= W;
+      if (s.y < 0) s.y += H; else if (s.y > H) s.y -= H;
+      ctx.globalAlpha = s.o * (.6 + .4 * Math.sin(t * .0012 * s.s + s.p));
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  seed();
+  let rt = 0;
+  addEventListener('resize', () => {
+    clearTimeout(rt); rt = setTimeout(seed, 180);
+  }, { passive: true });
+
+  if (REDUCED.matches){ paint(0); return; }
+  // 借 GSAP 已有的 ticker，不另开一条 rAF 循环
+  gsap.ticker.add(paint);
+}
+
 /* ── 文案 ───────────────────────────────────── */
 const label = p => mode === 'east' && p.cn !== '—' ? `${p.cn}（${p.n}）` : p.n;
 const key = o => plain ? o.kp : o.kt;
+/* 占辞原文两种口吻下都摆着 —— 它是内容本身，不是措辞。
+   说人话版在后面补一段注，把「葆旅」「水衡」这类今天没人用的词讲明白。
+   不把占辞改写成第二人称：中国星占本来就不算个人，改了就是编造。 */
+const zhanOf = m => m.zhan + (plain && m.zhanP ? '　' + m.zhanP : '');
 
 function brief(name){
   const b = chart.bodies[name];
@@ -430,8 +606,13 @@ function brief(name){
 function compose(pn){
   const p = DATA.planets.find(x => x.n === pn), b = chart.bodies[pn];
   const s = DATA.signs[b.sign], h = DATA.houses[b.house];
+  /* 收尾换过两轮。原来是「落在X这一块」，撞上第十二宫的
+     「自己也看不清的那部分」就成了「那部分这一块」；改成「用在「X」上」
+     之后语法通了，但读着仍像在填表。现在是「多半落在X」——
+     十二个宫逐条念过都顺，而且「多半」这两个字本身就在说
+     这是倾向不是判决，跟这一页的立场对得上。 */
   return plain
-    ? `${key(p)}带着「${key(s)}」的底色，落在${key(h)}这一块。`
+    ? `${key(p)}带着「${key(s)}」的底色，多半落在${key(h)}。`
     : `主${key(p)}，值${s.n}，${key(s)}；居${h.n}，主${key(h)}。`;
 }
 
@@ -445,7 +626,7 @@ function show(kind, k){
       title = label(p);
       sub = `${m.n}宿 入宿 ${b.rudu.toFixed(2)}°　${m.xiang}　分野 ${m.guo}·${m.zhou}`;
       body = (plain ? p.p : p.t)
-        + `<br><br><b>所临之宿</b>：${m.n}宿，${m.zhan}`
+        + `<br><br><b>所临之宿</b>：${m.n}宿，${zhanOf(m)}`
         + `<br>此宿属${m.xiang}，分野在${m.guo}（${m.zhou}）。`
         + `<br><br><b>入宿度</b>：${b.rudu.toFixed(2)}° —— `
         + `中式定度自距星起算，宿度不等，此宿共 ${m.deg.toFixed(1)}°。`;
@@ -479,7 +660,7 @@ function show(kind, k){
     const inside = Object.entries(chart.bodies)
       .filter(([n, b]) => b.xiu === k && !['上升','天顶'].includes(n))
       .map(([n, b]) => `${n}（入宿 ${b.rudu.toFixed(1)}°）`);
-    body = m.zhan
+    body = zhanOf(m)
          + `<br><br>二十八宿按赤道划分，宿度不等 —— 这一宿占 `
          + `${m.deg.toFixed(1)} 度（最宽的井宿 32.2°，最窄的觜宿 1.4°）。`
          + (inside.length ? `<br><br><b>此盘落入</b>：${inside.join('、')}`
@@ -769,7 +950,8 @@ function lines(){
             + `所以这份喜好多半绕着「${key(DATA.houses[vb.house])}」打转。`,
             ['planet', '金星']]);
     L.push(['b', `火星 · ${sName('火星')} ${mb.deg.toFixed(1)}° · 第 ${mb.house + 1} 宫`,
-            dg(DATA.mars[sName('火星')]) + `。使劲的地方多在${DATA.houses[mb.house].n}。`,
+            dg(DATA.mars[sName('火星')])
+            + `。这股劲多半使在${key(DATA.houses[mb.house])}上。`,
             ['planet', '火星']]);
     {
       const rb2 = B[chart.h7.ruler];
@@ -782,15 +964,19 @@ function lines(){
               rb2 ? ['planet', chart.h7.ruler] : null]);
     }
     L.push(['b', `月亮 · ${sName('月亮')} ${B['月亮'].deg.toFixed(1)}° · 第 ${B['月亮'].house + 1} 宫`,
-            `不设防时要的东西：${key(S[B['月亮'].sign])}。`
-            + `传统上月亮比太阳更能说明亲密关系里的实际相处。`,
+            `卸下防备的时候，你${key(S[B['月亮'].sign])} —— `
+            + `这份底子平时不一定看得出来，越亲近越藏不住。`
+            + `传统上月亮比太阳更能说明关系里的实际相处。`,
             ['planet', '月亮']]);
     {
       const hits = chart.asp
         .filter(a => a.a === '金星' || a.b === '金星')
         .map(a => {
           const other = a.a === '金星' ? a.b : a.a;
-          return { txt: DATA.venusAsp[`${other}|${a.type}`], a };
+          /* venusAsp2 是后加的字段（{t,p} 两版）。老字段 venusAsp 仍在，
+             填的是术语版 —— 旧代码长缓存还在跑，不能改它的形状。 */
+          const e2 = DATA.venusAsp2 && DATA.venusAsp2[`${other}|${a.type}`];
+          return { txt: e2 ? dg(e2) : DATA.venusAsp[`${other}|${a.type}`], a };
         })
         .filter(x => x.txt);
       if (hits.length)
@@ -821,24 +1007,25 @@ function lines(){
               rb3 ? ['planet', chart.h10.ruler] : null]);
     }
     L.push(['b', `太阳 · ${sName('太阳')} · 第 ${B['太阳'].house + 1} 宫（${DATA.houses[B['太阳'].house].n}）`,
-            `想成为什么样的人：${key(S[B['太阳'].sign])}；`
-            + `这件事主要在${DATA.houses[B['太阳'].house].n}那一块展开。`,
+            `你想成为的那个人，底子是「${key(S[B['太阳'].sign])}」；`
+            + `这件事主要在${key(DATA.houses[B['太阳'].house])}那一块展开。`,
             ['planet', '太阳']]);
     {
       const sb = B['土星'], sd = dignitiesOf('土星');
       L.push(['b', `土星 · ${sName('土星')} · 第 ${sb.house + 1} 宫　`
                  + `合计 ${sd.total >= 0 ? '+' : ''}${sd.total}`,
-              `传统上土星所在的宫是「慢熟、要吃苦、但最后最结实」的那一块 ——`
-              + `这里是${DATA.houses[sb.house].n}。`
-              + (sd.total < 0 ? '这颗土星本身也不强，所以这块地方多半是硬熬出来的。'
+              `传统上土星落在哪一宫，哪一块就是「慢熟、要吃苦、`
+              + `但最后最结实」的地方 —— 在你这张盘上是${key(DATA.houses[sb.house])}。`
+              + (sd.total < 0 ? '这颗土星本身也不强，所以这一块多半得硬熬出来。'
                               : '这颗土星站得住，扛起来相对有底。'),
               ['planet', '土星']]);
     }
     {
       const jb = B['木星'];
       L.push(['b', `木星 · ${sName('木星')} · 第 ${jb.house + 1} 宫`,
-              `传统上木星所在的宫是相对松、相对有余地的那一块 ——`
-              + `这里是${DATA.houses[jb.house].n}。也容易在这块铺太大。`,
+              `传统上木星落在哪一宫，哪一块就相对松、相对有余地 ——`
+              + `在你这张盘上是${key(DATA.houses[jb.house])}。`
+              + `另一面是容易在这儿铺得太大。`,
               ['planet', '木星']]);
     }
     {
@@ -881,9 +1068,9 @@ function lines(){
     for (const t of chart.transit)
       L.push(['b', `今日行运　${t.n}在${t.sign} ${(t.lon % 30).toFixed(1)}°　`
                  + `走到你的第 ${t.house + 1} 宫（${DATA.houses[t.house].n}）`,
-              DATA.transitHouse[t.n]
-              + `此刻落在${DATA.houses[t.house].n}，`
-              + `也就是「${key(DATA.houses[t.house])}」那一块。`]);
+              (DATA.transitHouse2 ? dg(DATA.transitHouse2[t.n])
+                                  : DATA.transitHouse[t.n])
+              + `你现在这一轮落在${key(DATA.houses[t.house])}。`]);
     L.push(['n', `行运位置按 ${chart.now.date.getUTCFullYear()} 年 `
                + `${chart.now.date.getUTCMonth() + 1} 月 ${chart.now.date.getUTCDate()} 日算，`
                + '每次打开这一页都会重算。只列木星与土星 —— '
@@ -906,7 +1093,7 @@ function lines(){
     L.push(['n', '中式盘不设十二宫，改看上升点落在二十八宿的哪一宿。'
                + '宿度不等，所以「入宿几度」比「几宫几度」更要紧。']);
     L.push(['b', `命宫在${am.n}宿　入宿 ${B['上升'].rudu.toFixed(2)}°　宿广 ${am.deg.toFixed(1)}°`,
-            `${am.n}宿属${am.xiang}，分野在${am.guo}（${am.zhou}）。${am.zhan}`,
+            `${am.n}宿属${am.xiang}，分野在${am.guo}（${am.zhou}）。${zhanOf(am)}`,
             ['xiu', B['上升'].xiu]]);
 
     L.push(['k', '三 · 七 政 所 临　【传】']);
@@ -917,7 +1104,7 @@ function lines(){
       const b = B[n], m = M[b.xiu];
       const pl = DATA.planets.find(x => x.n === n);
       L.push(['b', `${pl.cn}（${n}）在${m.n}宿 ${b.rudu.toFixed(2)}°　${m.xiang}`,
-              `${m.zhan}　分野 ${m.guo}·${m.zhou}。`
+              `${zhanOf(m)}　分野 ${m.guo}·${m.zhou}。`
               + `此宿广 ${m.deg.toFixed(1)}°，距星赤经 ${m.ra.toFixed(1)}°。`,
               ['planet', n]]);
     }
@@ -929,7 +1116,7 @@ function lines(){
       const b = B[n], m = M[b.xiu];
       const pl = DATA.planets.find(x => x.n === n);
       L.push(['b', `${pl.cn}（${n}）在${m.n}宿 ${b.rudu.toFixed(2)}°`,
-              (plain ? pl.p : pl.t) + `　所临${m.n}宿，${m.zhan}`, ['planet', n]]);
+              (plain ? pl.p : pl.t) + `　所临${m.n}宿，${zhanOf(m)}`, ['planet', n]]);
     }
 
     const xc = {}, gs = {};
@@ -1053,6 +1240,8 @@ function renderData(){
 }
 
 /** 逐条浮现。重排时用 token 作废上一轮，免得两批动画叠在一起。 */
+let skipReveal = null;                    // 播到一半时点一下，剩下的全出来
+
 async function runReading(){
   const box = $('tabread');
   const my = ++revealToken;
@@ -1060,24 +1249,36 @@ async function runReading(){
   const L = lines();
   /* 节奏按总条数分摊。原来是每条固定 140ms —— 那时报告只有二十几条，
      三秒出完。补上感情、事业、时机之后涨到八十条，同样的节奏要拖十几秒，
-     等成了折磨。改成总时长封顶约六秒，条数越多每条越快。 */
-  const step = Math.max(35, Math.min(140, 6000 / L.length));
+     等成了折磨。先前封顶六秒，还是长：这栏是要读的，不是要看的，
+     动效应该让人知道「在往下写」，不该让人等着才能读。现在封顶三秒半，
+     另外随时可以点掉 —— 一等就是几秒还没法跳过，本身就是个体验缺陷。 */
+  const step = Math.max(18, Math.min(110, 3500 / L.length));
+  /* 后台标签页里 setTimeout 会被压到一秒起跳，八十条就是八十秒 ——
+     切回来看到的是还在一条条往外挤。隐藏时直接全出来。 */
+  let instant = document.hidden;
+  skipReveal = () => { instant = true; };
+  document.body.classList.add('revealing');
   for (const [kind, a, b, tap] of L){
     if (my !== revealToken) return;              // 已被新的一轮顶掉
     const row = document.createElement('div');
-    row.className = 'rl ' + kind + (tap ? ' tapable' : '');
+    row.className = 'rl ' + kind + (tap ? ' tapable' : '') + (instant ? ' in' : '');
     row.innerHTML = kind === 'b'
       ? `<div class="rt">${a}</div><div class="rb">${b}</div>`
       : a;
     // 手机上盘上那些点太小按不中，条目本身就是入口
     if (tap) row.addEventListener('click', () => show(tap[0], tap[1]));
     box.appendChild(row);
+    if (instant) continue;    // 已跳过：直接带 .in 落地，不再逐条回流
     // 强制回流让初始状态落定，再加 .in ——
     // 不能用 requestAnimationFrame：标签页在后台时它根本不触发，
     // 那样整栏会永远停在 opacity 0，切回来是一片空白。
     void row.offsetWidth;
     row.classList.add('in');
     await wait(kind === 'h' ? step * 2.2 : kind === 'k' ? step * 1.6 : step);
+  }
+  if (my === revealToken){
+    document.body.classList.remove('revealing');
+    skipReveal = null;
   }
 }
 
@@ -1149,20 +1350,28 @@ export function mount(){
   $('back').addEventListener('click', closePanel);
   addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
-  $('plain').textContent = plain ? '说 人 话' : '术 语';
-  $('plain').classList.toggle('on', plain);
-  $('plain').addEventListener('click', () => {
-    plain = !plain;
-    $('plain').textContent = plain ? '说 人 话' : '术 语';
-    $('plain').classList.toggle('on', plain);
-    if (chart) runReading();
-  });
-  document.querySelectorAll('.seg button').forEach(b => {
+  /* 口吻：两个按钮，哪个亮着就是哪个。
+     原来是顶栏上一个按钮来回换字 —— 反馈是「我都不知道要点这个」，
+     而且单钮上那个词到底是当前状态还是点完的状态，界面上说不清。 */
+  document.querySelectorAll('#plainseg button').forEach(b => {
     b.addEventListener('click', () => {
-      document.querySelectorAll('.seg button').forEach(x => x.classList.remove('on'));
+      const want = b.dataset.p === '1';
+      if (want === plain) return;
+      plain = want;
+      document.querySelectorAll('#plainseg button')
+        .forEach(x => x.classList.toggle('on', x === b));
+      if (chart) runReading();
+    });
+  });
+  /* 必须限定在顶栏里。口吻那组也是 .seg（借的同一套样式），
+     不限定的话点「术语」会连带把 mode 设成 undefined，盘直接跳到中式 ——
+     加完那组按钮第一次点就撞上了。 */
+  document.querySelectorAll('#bar .seg button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#bar .seg button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
       mode = b.dataset.m;
-      closePanel(); draw(); runReading();
+      closePanel(); draw(); flyIn(true); runReading();
     });
   });
   $('hsys').addEventListener('change', () => { hsys = $('hsys').value; cast(); });
@@ -1175,6 +1384,43 @@ export function mount(){
       document.body.classList.toggle('tab-data', b.dataset.t === 'data');
     });
   });
+  dust();
+
+  /* 头一回来给三行说明。星图与概念图早就加了，这一页一直没有 ——
+     而这一页其实更需要：另外两页点哪儿都有反应，这页得先把生辰填进去
+     才有东西看，而手机上那张表单默认是收起的。
+     记在 localStorage 里，存的是「看过了」，不是身份。 */
+  if (!localStorage.getItem('xingtu-astro-seen')){
+    const fr = document.createElement('div');
+    fr.id = 'firstrun';
+    fr.innerHTML = [
+      '左边填出生日期、时间、出生地，按「排 盘」',
+      '盘上任何一个点、一条线，鼠标停上去就说这是什么、为什么跟你有关',
+      '右边解析栏可切「说人话 / 术语」两种口吻',
+    ].map((t, i) => `<div class="fl"><b>${i + 1}</b>${t}</div>`).join('')
+      + '<div class="fx">知道了</div>';
+    document.body.appendChild(fr);
+    const dismiss = () => {
+      fr.classList.add('gone');
+      localStorage.setItem('xingtu-astro-seen', '1');
+      setTimeout(() => fr.remove(), 500);
+    };
+    fr.querySelector('.fx').addEventListener('click', dismiss);
+    // 后台标签页里 rAF 不触发，补一手定时器
+    requestAnimationFrame(() => fr.classList.add('on'));
+    setTimeout(() => fr.classList.add('on'), 60);
+  }
+
+  /* 逐条浮现播到一半想直接读全文的，点解析栏任意处即可。
+     底下那枚「全部展开」是给不知道能点的人看的提示。 */
+  const skipHit = e => {
+    if (!skipReveal) return;
+    if (e.target.closest('.tapable,#tabs,#plainseg')) return;   // 那些点击另有其事
+    skipReveal();
+  };
+  $('read').addEventListener('click', skipHit);
+  $('skipall').addEventListener('click', () => skipReveal && skipReveal());
+
   $('railtoggle').addEventListener('click',
     () => document.body.classList.toggle('rail-off'));
   $('readtoggle').addEventListener('click',

@@ -4,3 +4,7 @@ __pycache__/
 Thumbs.db
 node_modules/
 .wrangler/
+
+# 子集化用的源字体，24MB，不进仓库。
+# 取自 https://github.com/lxgw/LxgwWenKai/releases
+.fontsrc/

@@ -9,20 +9,28 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
-<link rel="stylesheet" href="engine.css?v=0f488467">
-<link rel="stylesheet" href="astro.css?v=f5583df7">
+<link rel="stylesheet" href="engine.css?v=74decc3f">
+<link rel="stylesheet" href="astro.css?v=9e4bf751">
+
+<canvas id="dust"></canvas>
+<div id="wheel">
+  <div id="deck">
+    <div class="lay" id="lay-asp"><svg></svg></div>
+    <div class="lay" id="lay-ring"><svg></svg></div>
+    <div class="lay" id="lay-body"><svg></svg></div>
+  </div>
+</div>
 
 <div id="bar">
-  <div id="title">星 盤</div>
-  <div id="nav"><a href="index.html">星 圖</a><a href="concept.html">概 念</a><a href="astro.html" class="cur">星 盤</a><a href="ziwei.html">紫 微</a></div>
+  <div id="title">星 盘</div>
+  <div id="nav"><a href="index.html">星 图</a><a href="concept.html">概 念</a><a href="astro.html" class="cur">星 盘</a><a href="ziwei.html">紫 微</a></div>
   <div class="seg">
-    <button data-m="west" class="on">西洋盤</button>
-    <button data-m="east">中式盤</button>
+    <button data-m="west" class="on">西洋盘</button>
+    <button data-m="east">中式盘</button>
   </div>
-  <div id="plain">术 语</div>
   <div id="where">
     <span id="stamp"></span>
-    <div id="srcbtn">來 源</div>
+    <div id="srcbtn">来 源</div>
   </div>
 </div>
 
@@ -54,7 +62,7 @@
 
 <div id="back">← 收 起</div>
 <div id="src"><div class="box"><div id="srcclose">关</div>
-<h3>來 源 與 授 權</h3>
+<h3>来 源 与 授 权</h3>
 <div id="srcbody">
 <h4>这一页的立场</h4>
 <p><b>行星位置是真算的。</b>用 JPL 公布的行星近似轨道根数与 Meeus《天文算法》的
@@ -82,17 +90,24 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 地点用内置的城市经纬度表，不调用任何地理编码服务。</p>
 </div></div></div>
 
-<svg id="wheel"></svg>
 <div id="card"></div>
 
 <aside id="read">
   <div id="sum"></div>
+  <div id="voice">
+    <span class="vl">口 吻</span>
+    <div class="seg" id="plainseg">
+      <button data-p="1" class="on">说 人 话</button>
+      <button data-p="0">术 语</button>
+    </div>
+  </div>
   <div id="tabs">
     <button data-t="read" class="on">解 读</button>
     <button data-t="data">数 据</button>
   </div>
   <div id="tabread"></div>
   <div id="tabdata"></div>
+  <div id="skipall">全 部 展 开</div>
 </aside>
 <div id="readtoggle">解 析</div>
 
@@ -103,6 +118,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=848f7fb8';
+import { mount } from './astro.js?v=a54b2c37';
 mount();
 </script>

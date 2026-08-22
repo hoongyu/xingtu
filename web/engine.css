@@ -20,7 +20,7 @@
    源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=a5e5c4a1') format('woff2');
+  src:url('./wenkai-subset.woff2?v=b3db6cf7') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -33,7 +33,10 @@ body{
 #sky.zoomed{cursor:default}
 
 /* ── 星点 ───────────────────────────────────────── */
-.star{fill:var(--ink);transition:fill .5s ease}
+/* 亮度写在 --o 上。以前这条只由 @keyframes tw 消费，等于「不闪的星
+   就没有亮度」—— 现在只有最亮的两百多颗在闪，其余的必须在这里拿到
+   自己的亮度，否则会齐刷刷全亮成一片。 */
+.star{fill:var(--ink);opacity:var(--o,1);transition:fill .5s ease}
 .star.twinkle{animation:tw var(--dur) ease-in-out infinite;animation-delay:var(--del)}
 @keyframes tw{
   0%,100%{opacity:var(--o)}
@@ -311,6 +314,8 @@ body:not(.rail-off) #railtoggle{left:212px}
   margin-left:auto;font-size:11px;color:var(--ink-dim);letter-spacing:.1em;
   display:flex;align-items:center;gap:10px;
 }
+.sitelab{font-family:var(--song);font-size:10px;letter-spacing:.2em;
+  color:var(--ink-faint);margin-right:-4px}
 #where select{
   background:none;border:1px solid var(--ink-faint);color:var(--ink);
   font-family:var(--hei);font-size:11px;padding:5px 8px;cursor:pointer;
@@ -330,7 +335,7 @@ body.open #hint{opacity:0}
 /* ══ 手机 ══════════════════════════════════════════
    桌面版整套是「鼠标 + 宽屏」的假设：侧栏 212px 推开正文、
    顶栏一行排开、提示卡跟着指针走。这三条在 375px 上全不成立 ——
-   实测侧栏占屏 57%，顶栏内容 692px 溢出到屏外（「來源」按钮
+   实测侧栏占屏 57%，顶栏内容 692px 溢出到屏外（「来源」按钮
    落在 x=589，够不着），提示卡出现在手指底下自己挡自己。
 
    所以这一层不是「缩小一点」，是换一套摆法：
@@ -480,4 +485,19 @@ body.open #hint{opacity:0}
   #firstrun{bottom:calc(72px + env(safe-area-inset-bottom));padding:16px 16px 12px}
   #firstrun .fl{font-size:13px}
   #firstrun .fx{padding:8px 2px 2px;font-size:13px}
+}
+
+
+/* ── 减少动态 ─────────────────────────────────────
+   系统里开了「减少动态效果」的人，多半不是嫌不好看 —— 前庭功能敏感
+   的人看这种缓慢漂移与呼吸会晕。这一整套装饰性动画对他们全部关掉：
+   星不闪、轮廓不呼吸、星官不逐段生长、盘不倾斜。
+   信息一点不少，只是不再动。
+
+   保留的是 transition：那些是「状态变了」的反馈，不是氛围，
+   去掉之后界面会变得莫名其妙。 */
+@media (prefers-reduced-motion: reduce){
+  .star.twinkle,.link.lore,.link.lit{animation:none}
+  .link.lore{opacity:var(--rest)}
+  #firstrun{transition-duration:.01ms}
 }

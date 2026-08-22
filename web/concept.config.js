@@ -27,6 +27,11 @@ export const CFG = {
     return [2.6 + h % 40 / 9, h % 31 / 8];
   },
   visible: (f, maxHard) => f[3] <= maxHard,
+  /* 「超出当前难度」不是「看不见」。星图用暗红标地平线以下的星，
+     那是事实判断；这张图上同样的红会说成「这块不该你看」——
+     入门档下 161 个里有 73 个，近一半的图变成红的。换一抹冷蓝，
+     意思回到「在更深处，还没走到」。 */
+  belowFill: 'rgba(132,168,204,.62)',
 
   rings: D => [
     [D.meta.levels[1], 'gui', '一层 · 主干'],
@@ -42,7 +47,7 @@ export const CFG = {
       + `<div><span class="k">领域</span><span class="v">${D.meta.sectors[sec]}</span></div>`
       + `<div><span class="k">难度</span><span class="v">${['浅','中','深','专'][hard]}</span></div>`
       + (D.notes[id] ? `<div class="note">${D.notes[id]}</div>` : '')
-      + (below ? `<div class="warn">超出当前难度档</div>` : '');
+      + (below ? `<div class="warn">比当前档更深 —— 右上角换档就点得开</div>` : '');
   },
 
   facts(g, D, maxHard, tierName){
@@ -70,7 +75,8 @@ credits:
     placeholder: '搜概念、线索…',
     hint: c => c === 'lineage' ? '点 一 条 线 索' : '点 一 段 流 程',
     tag: c => c === 'lineage' ? '谱系' : '流水线',
-    lost: n => `${n} 个超出此档`,
+    siteLabel: '难 度',
+    lost: n => `更深的档位里还有 ${n} 个`,
     noLore: '这条线索还没写说明。',
     back: '← 退 回 全 图',
     guide: '点旁边任何一个暗的关键词 → 直接跳到它所在的那条线索　·　'

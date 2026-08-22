@@ -126,6 +126,7 @@ credits:
   + '「永不升起」按所选观测地的纬度实算，不是估的。</p>',
 
   text: {
+    siteLabel: '观 测 地',
     title: '星 图',
     placeholder: '搜星官、星座、星名…',
     hint: c => c === 'cn' ? '点 一 颗 星 官' : '点 一 个 星 座',

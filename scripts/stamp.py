@@ -45,6 +45,7 @@ def main():
     # 被依赖的那几个都是叶子（自己不再 import 别的带戳资源），
     # 所以「先改引用、再算哈希」这个顺序仍然成立。
     INNER = [('astro.js', 'ephem.js'), ('astro.js', 'places.js'),
+             ('astro.js', 'gsap.esm.js'),
              ('sky.config.js', 'places.js'),
              # 字体在 CSS 里被 @font-face 引用，同样要打戳 ——
              # 换了字体而 URL 不变的话，长缓存会把旧的锁死
