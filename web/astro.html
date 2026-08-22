@@ -9,8 +9,8 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
-<link rel="stylesheet" href="engine.css?v=74decc3f">
-<link rel="stylesheet" href="astro.css?v=9e4bf751">
+<link rel="stylesheet" href="engine.css?v=141713c4">
+<link rel="stylesheet" href="astro.css?v=40fc36c9">
 
 <canvas id="dust"></canvas>
 <div id="wheel">
@@ -94,6 +94,11 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 
 <aside id="read">
   <div id="sum"></div>
+  <div id="ask">
+    <span class="vl">我 想 问</span>
+    <select id="askq"></select>
+  </div>
+  <div id="askhint"></div>
   <div id="voice">
     <span class="vl">口 吻</span>
     <div class="seg" id="plainseg">
@@ -118,6 +123,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=a54b2c37';
+import { mount } from './astro.js?v=4939fe42';
 mount();
 </script>

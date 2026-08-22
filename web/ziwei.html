@@ -9,7 +9,37 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>紫微斗数 · 十二宫排盘</title>
-<link rel="stylesheet" href="ziwei.css?v=01f600b4">
+<link rel="stylesheet" href="ziwei.css?v=bb7c575e">
+
+<!-- 纸上的三样陈设：窗棂、竹枝、香炉。都压得很淡，是底子不是画面 ——
+     这一页真正要被读的是十二宫里的字。
+     窗棂用一张 48 见方的 pattern 平铺（步步锦的路子：井字加四角卡子），
+     竹枝两丛各占一角，香炉在中宫底下，烟是 canvas 画的。 -->
+<svg id="zdeco" aria-hidden="true">
+  <defs>
+    <pattern id="zling" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M0 0H48M0 24H48M0 0V48M24 0V48
+               M6 6H18M6 6V18 M42 6H30M42 6V18
+               M6 42H18M6 42V30 M42 42H30M42 42V30"/>
+    </pattern>
+  </defs>
+  <rect id="zlingfill" width="100%" height="100%" fill="url(#zling)"></rect>
+  <g class="zbam zbam-a">
+    <path class="zstem" d="M6 4 C34 42 44 96 40 158"></path>
+    <path class="zstem" d="M6 4 C26 30 30 58 46 84"></path>
+    <path class="zleaf" d="M40 40 C64 30 88 34 106 48 C82 54 58 52 40 40Z"></path>
+    <path class="zleaf" d="M36 62 C58 62 80 74 92 92 C68 90 46 80 36 62Z"></path>
+    <path class="zleaf" d="M44 86 C70 84 92 96 104 116 C78 112 56 102 44 86Z"></path>
+    <path class="zleaf" d="M38 110 C56 118 70 136 74 158 C56 146 42 130 38 110Z"></path>
+    <path class="zleaf" d="M46 26 C64 16 86 14 104 20 C86 32 64 34 46 26Z"></path>
+  </g>
+  <g class="zbam zbam-b">
+    <path class="zstem" d="M6 4 C34 42 44 96 40 158"></path>
+    <path class="zleaf" d="M40 40 C64 30 88 34 106 48 C82 54 58 52 40 40Z"></path>
+    <path class="zleaf" d="M36 62 C58 62 80 74 92 92 C68 90 46 80 36 62Z"></path>
+    <path class="zleaf" d="M44 86 C70 84 92 96 104 116 C78 112 56 102 44 86Z"></path>
+  </g>
+</svg>
 
 <div id="zbar">
   <div id="ztitle">紫 微 斗 数</div>
@@ -42,7 +72,14 @@
 
 <main id="zgrid"></main>
 
-<aside id="zread"></aside>
+<aside id="zread">
+  <div id="zask">
+    <span class="zvl">我 想 问</span>
+    <select id="zaskq"></select>
+  </div>
+  <div id="zaskhint"></div>
+  <div id="zbody"></div>
+</aside>
 <div id="zreadtoggle">解 读</div>
 
 <div id="zsrc"><div class="zbox"><div id="zsrcclose">关</div>
@@ -51,6 +88,6 @@
 </div></div>
 
 <script type="module">
-import { mount } from './ziwei.page.js?v=e52399d4';
+import { mount } from './ziwei.page.js?v=e8c2773e';
 mount();
 </script>

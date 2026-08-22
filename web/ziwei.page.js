@@ -86,7 +86,8 @@ function run(){
     + `五行局 <b>${c.juName}</b>`;
 
   draw();
-  read();
+  syncAsk($('zaskq') && $('zaskq').value || '命宫');
+  read(chart.palaces.find(x => x.name === (($('zaskq') && $('zaskq').value) || '命宫')));
 }
 
 function draw(){
@@ -108,7 +109,19 @@ function draw(){
           + `五行局 <b>${c.juName}</b>　命宫在 <b>${ZHI[c.ming]}</b><br>`
           + `身宫在 <b>${ZHI[c.shen]}</b>　大限 <b>${c.forward ? '顺行' : '逆行'}</b>`
           + `</div>`
-          + `<div class="zseal">紫微在 ${ZHI[c.zwPos]}</div>`;
+          + `<div class="zseal">紫微在 ${ZHI[c.zwPos]}</div>`
+          /* 香炉在中宫底下，烟从三根香上起。摆在文字后面，不挡读。
+             炉是三足双耳的样子，线描，不填色 —— 这一页是纸不是画。 */
+          + `<canvas id="zsmoke"></canvas>`
+          + `<svg id="zcenser" viewBox="0 0 132 92" aria-hidden="true">`
+          + `<path class="zxiang" d="M52 34V12M66 34V6M80 34V13"/>`
+          + `<path class="zbody" d="M32 38 Q32 68 50 76 L82 76 Q100 68 100 38Z"/>`
+          + `<path d="M24 38H108"/>`
+          + `<path d="M24 34 q-10 -3 -10 -11 q0 -8 8 -8 q7 0 7 7"/>`
+          + `<path d="M108 34 q10 -3 10 -11 q0 -8 -8 -8 q-7 0 -7 7"/>`
+          + `<path d="M45 76 l-5 12M66 77 v12M87 76 l5 12"/>`
+          + `<path d="M38 46 Q66 53 94 46"/>`
+          + `</svg>`;
         g.appendChild(mid);
       }
       return;
@@ -117,6 +130,7 @@ function draw(){
     const el = document.createElement('div');
     el.className = 'zp' + (p.name === '命宫' ? ' ming' : '')
                  + (p.isShen ? ' shen' : '') + (p.stars.length ? '' : ' empty');
+    el.dataset.pal = p.name;         // 「我想问」靠它把那一格标出来
     el.style.gridArea = `${Math.floor(i / 4) + 1} / ${i % 4 + 1}`;
     const cls = k => k === '主' ? 'zh' : k === '吉' ? 'zj' : 'zs';
     el.innerHTML =
@@ -126,7 +140,7 @@ function draw(){
           `<span class="zst ${cls(s.kind)}">${s.name}`
           + (s.hua ? `<span class="zhua">${s.hua}</span>` : '') + `</span>`).join('')
       + `</div><div class="zdx">${p.daxian[0]}–${p.daxian[1]}</div>`;
-    el.addEventListener('click', () => read(p));
+    el.addEventListener('click', () => { syncAsk(p.name); read(p); });
     g.appendChild(el);
     cells.push(el);
   });
@@ -143,11 +157,111 @@ function draw(){
   gsap.fromTo('#zcenter',
     { opacity: 0, scale: .97 },
     { opacity: 1, scale: 1, duration: .6, ease: 'power2.out', delay: .5 });
+  smoke();
+}
+
+/* ── 香炉上的烟 ──────────────────────────────────
+   为什么用 canvas 而不是 svg 滤镜：feTurbulence 做烟确实像，
+   但要动起来得每帧改 baseFrequency，那是整片区域重新滤波，
+   在手机上很贵。三十来个粒子画成径向渐变的小团，一样是烟，
+   代价小两个数量级。
+
+   烟的样子不是随便飘：起点抖动小、越往上越散、越往上越淡，
+   横向用一条慢正弦加一点随机 —— 直着上去像水汽，摆得太厉害像特效。 */
+let smokeTicker = null;
+function smoke(){
+  const cv = $('zsmoke');
+  if (!cv) return;
+  if (smokeTicker){ gsap.ticker.remove(smokeTicker); smokeTicker = null; }
+  const ctx = cv.getContext('2d');
+  const DPR = Math.min(devicePixelRatio || 1, 2);
+  let W = 0, H = 0, ps = [];
+  const N = matchMedia('(max-width: 860px)').matches ? 16 : 30;
+
+  const seed = () => {
+    const r = cv.getBoundingClientRect();
+    W = cv.width = Math.max(1, Math.round(r.width * DPR));
+    H = cv.height = Math.max(1, Math.round(r.height * DPR));
+  };
+  const born = (i) => ({
+    // 三根香，出生点就在那三根的顶上
+    x: W * (0.395 + (i % 3) * 0.105),
+    y: H,
+    r: (3 + Math.random() * 3) * DPR,
+    v: (0.22 + Math.random() * 0.3) * DPR,
+    p: Math.random() * 6.283,
+    w: 0.6 + Math.random() * 0.9,          // 摆动快慢
+    a: 0.055 + Math.random() * 0.05,       // 起始浓度
+    life: 0,
+    span: 240 + Math.random() * 200,
+  });
+  seed();
+  ps = Array.from({ length: N }, (_, i) => {
+    const q = born(i); q.life = Math.random() * q.span; return q;   // 错开，别一起冒
+  });
+
+  const paint = () => {
+    if (!cv.isConnected){ gsap.ticker.remove(paint); smokeTicker = null; return; }
+    if (cv.width !== Math.round(cv.getBoundingClientRect().width * DPR)) seed();
+    ctx.clearRect(0, 0, W, H);
+    for (let i = 0; i < ps.length; i++){
+      const s = ps[i];
+      s.life++;
+      if (s.life > s.span){ ps[i] = born(i); continue; }
+      const t = s.life / s.span;                 // 0→1
+      s.y -= s.v;
+      const drift = Math.sin(s.p + s.life * 0.012 * s.w) * 9 * DPR * t;
+      const x = s.x + drift;
+      const r = s.r * (1 + t * 5.5);             // 越往上越散
+      const a = s.a * (1 - t) * Math.min(1, t * 6);   // 出生时淡入，末了淡出
+      const g = ctx.createRadialGradient(x, s.y, 0, x, s.y, r);
+      g.addColorStop(0, `rgba(38,34,29,${a.toFixed(4)})`);
+      g.addColorStop(1, 'rgba(38,34,29,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, s.y, r, 0, 6.283); ctx.fill();
+    }
+  };
+  // 开了「减少动态」就只留一缕静态的，不动
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches){ paint(); return; }
+  smokeTicker = paint;
+  gsap.ticker.add(paint);
+}
+
+/** 下拉、提示文字、盘上那一格的高亮，三处保持一致。 */
+function syncAsk(name){
+  const sel = $('zaskq');
+  if (sel && sel.value !== name){
+    const has = [...sel.options].some(o => o.value === name);
+    sel.value = has ? name : '';
+  }
+  const row = ZASK.find(z => z[0] === name);
+  const hint = $('zaskhint');
+  if (hint) hint.textContent = row ? row[2] : '';
+  document.querySelectorAll('#zgrid .zp').forEach(
+    e => e.classList.toggle('asked', e.dataset.pal === name));
 }
 
 /* ── 解读 ───────────────────────────────────────── */
+/* 十二宫各管一摊，问题跟宫本来就是一一对应的 ——
+   只是没人会说「我想看我的官禄宫」。下拉里写人话，选中之后
+   跳到那一宫的解读，同时把盘上那一格框出来。 */
+const ZASK = [
+  ['命宫', '我 是 个 什 么 样 的 人', '整张盘的起点：性情、长相、遇事的第一反应。'],
+  ['夫妻', '感 情 与 婚 姻',       '看伴侣，也看你在关系里会怎么使劲。'],
+  ['官禄', '事 业 往 哪 儿 走',     '不是「能不能成」，是「往哪个方向使劲更顺」。'],
+  ['财帛', '钱 怎 么 来',          '看路子与节奏，不看数目 —— 一张盘算不出数目。'],
+  ['福德', '过 得 舒 不 舒 服',     '古人把这一宫看得很重：日子好不好，常写在这儿。'],
+  ['疾厄', '身 体 与 消 耗',       '看薄弱处，也看你怎么把自己耗掉。这里不写病名。'],
+  ['迁移', '出 门 在 外 顺 不 顺',   '远行、搬迁、换环境。有人是动一动才开。'],
+  ['田宅', '住 处 与 家 里',       '房子、住的地方，也看家里的气氛与你攒得下什么。'],
+  ['子女', '孩 子 与 我 做 的 东 西', '古法把生育与创作放在同一宫 —— 都是从你这儿生出来的。'],
+  ['父母', '和 长 辈 的 关 系',     '父母与权威，也看上头有没有人替你挡。'],
+  ['兄弟', '平 辈 与 合 伙',       '兄弟姐妹，也看跟人合伙时的分寸。'],
+  ['交友', '朋 友 与 下 属',       '古称仆役宫。看你跟不是平辈的人怎么处。'],
+];
+
 function read(palace){
-  const box = $('zread');
+  const box = $('zbody');
   const L = [];
   const c = chart;
   const P = palace || c.palaces.find(p => p.name === '命宫');
@@ -230,6 +344,20 @@ export function mount(){
     + `target="_blank" rel="noopener">项目地址</a></p>`
     + `<h4>动效</h4><p>GSAP 3.15，GreenSock 标准授权（2025 年 4 月起全部免费）。`
     + `<a href="https://gsap.com/standard-license" target="_blank" rel="noopener">授权条款</a></p>`;
+
+  /* 我想问：填选项、接事件。 */
+  const zs = $('zaskq');
+  for (const [pal, label] of ZASK){
+    const o = document.createElement('option');
+    o.value = pal; o.textContent = label; zs.appendChild(o);
+  }
+  zs.addEventListener('change', () => {
+    if (!chart) return;
+    const p = chart.palaces.find(x => x.name === zs.value);
+    syncAsk(zs.value); read(p);
+    if (matchMedia('(max-width: 860px)').matches)
+      document.body.classList.remove('zread-off');
+  });
 
   $('zcast').addEventListener('click', () => {
     run();

@@ -201,6 +201,8 @@ from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
                            DIGNITY, DIGNITY_READ, JIEQI, MOON_PHASE)
 from astro_life import (VENUS_SIGN, MARS_SIGN, MC_SIGN, HOUSE_SOURCE,
                         VENUS_ASPECT, CYCLE_READ, TRANSIT_HOUSE)
+from astro_mirror import (ASC_MIRROR, MOON_MIRROR, SUN_MIRROR,
+                          SATURN_MIRROR, CHART_MIRROR)
 from astro_dignity import (TRIPLICITY, TERMS, TERM_TOTALS, FACES, SCORE,
                            DIGNITY_WHY, CHART_TONE, ELEM_OF)
 from astro_why import (PLANET_WHY, SIGN_WHY, HOUSE_WHY, HOUSE_EMPTY,
@@ -282,6 +284,11 @@ def build():
         'venusAsp2': {f'{k[0]}|{k[1]}': {'t': v[0], 'p': v[1]}
                       for k, v in VENUS_ASPECT.items()},
         'cycle': {k: {'t': v[0], 'p': v[1]} for k, v in CYCLE_READ.items()},
+        # 照镜子那一层。只有一个版本 —— 它本来就不该有术语版：
+        # 术语版的作用是给想看原措辞的人看传统怎么说，
+        # 而这一层不是传统的说法，是把那些说法落到「这像不像你」上。
+        'mirror': {'asc': ASC_MIRROR, 'moon': MOON_MIRROR, 'sun': SUN_MIRROR,
+                   'saturn': SATURN_MIRROR, 'chart': CHART_MIRROR},
         'transitHouse': {k: v[0] for k, v in TRANSIT_HOUSE.items()},
         'transitHouse2': {k: {'t': v[0], 'p': v[1]}
                           for k, v in TRANSIT_HOUSE.items()},
@@ -320,10 +327,14 @@ def build():
             ('行星', PLANET_WHY, [p[0] for p in PLANETS]),
             ('星座', SIGN_WHY, [s0[0] for s0 in SIGNS]),
             ('宫位', HOUSE_WHY, list(range(1, 13))),
-            ('相位', ASPECT_WHY, [a[0] for a in ASPECTS])):
+            ('相位', ASPECT_WHY, [a[0] for a in ASPECTS]),
+            ('上升镜', ASC_MIRROR, [s0[0] for s0 in SIGNS]),
+            ('月亮镜', MOON_MIRROR, [s0[0] for s0 in SIGNS]),
+            ('太阳镜', SUN_MIRROR, [s0[0] for s0 in SIGNS]),
+            ('土星镜', SATURN_MIRROR, list(range(1, 13)))):
         miss = [k for k in keys if k not in tbl]
         assert not miss, f'{nm}的悬停说明缺这些：{miss}'
-    print('悬停说明覆盖检查通过（行星／星座／宫位／相位各无遗漏）')
+    print('词条覆盖检查通过（悬停四组 + 照镜子四组，各无遗漏）')
     t = check_terms()
     print('界表校验通过　各星总度数 '
           + '　'.join(f'{k} {v}' for k, v in t.items())

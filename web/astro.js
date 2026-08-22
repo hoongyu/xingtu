@@ -22,6 +22,26 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 // plain 默认为真 —— 这一页先要说得懂，术语版是给想看原措辞的人留的选项。
 let DATA, chart = null, mode = 'west', plain = true, hsys = 'placidus';   // 跟通行排盘器一致，已逐条验过
+let topic = 'all';                             // 「我想问」选的是哪一节
+
+/* 报告有七十多行，没人从头读到尾 —— 人心里通常只有一两个问题。
+   先问他问什么，再只给那一节。措辞按「他自己会怎么问」来写，
+   不是按占星的章节名：没人会说「我想看我的第十宫」。 */
+const ASK = [
+  ['all',   '整 张 盘',      '从天象到时机，全部读一遍。'],
+  ['me',    '我 是 个 什 么 样 的 人',
+            '上升、太阳、月亮 —— 别人看到的你、你想成为的你、没人时候的你。'],
+  ['love',  '感 情 上 我 要 什 么',
+            '金星看被什么吸引，月亮看不设防时要什么，七宫看关系里的你。'],
+  ['work',  '我 该 往 哪 儿 使 劲',
+            '天顶看别人从哪个方向认识你，十宫主看机会从哪儿来。'],
+  ['money', '钱 怎 么 来、留 不 留 得 住',
+            '二宫与它的宫主星，加上木星与土星落在哪。'],
+  ['hard',  '我 卡 在 哪 儿',
+            '土星所在，以及这张盘上最没有着力处的那几颗。'],
+  ['when',  '什 么 时 候 会 有 变 动',
+            '几个能算出年份的关口 —— 年份是算的，说法是传统的。'],
+];
 let pick = { y: 2000, m: 1, d: 1 };            // 默认停在 2000-01-01
 let calY = 2000, calM = 1;
 let revealToken = 0;
@@ -393,8 +413,9 @@ function draw(){
     g.appendChild(t);
     const [lx, ly] = pos(a, ringP - 30);
     const dg = el('text', { x: lx, y: ly + 4 }, 'bdeg');
-    dg.textContent = mode === 'west' ? `${b.deg.toFixed(0)}°`
-                                     : `${b.rudu.toFixed(0)}°`;
+    const dv = Math.round(mode === 'west' ? b.deg : b.rudu);
+    dg.dataset.v = dv;                 // 起盘时从 0 数到它
+    dg.textContent = dv + '°';
     g.appendChild(dg);
     g.addEventListener('click', () => show('planet', p.n));
     const pw = DATA.pw[p.n];
@@ -403,6 +424,20 @@ function draw(){
     g.addEventListener('mouseleave', hideCard);
     gBody.appendChild(g);
   }
+
+  /* 扫描光带。起盘时它绕盘一圈，扫到哪儿哪儿亮 ——
+     这是整段动效里唯一一个纯装饰的东西，理由是它正好长得像
+     浑仪上转动的窥管，跟这张盘是一路的。
+     做法是六片依次变淡的扇叶拼成一条尾巴，整体旋转；
+     不用 conic-gradient 是因为要跟着 svg 的坐标系走，
+     而且这样能精确停在外规上，不溢出盘面。 */
+  const sweep = el('g', {}, 'sweep');
+  for (let i = 0; i < 6; i++)
+    sweep.appendChild(el('path', {
+      d: arcPath(-i * 8 - 8, -i * 8, hRing * .18, outer * 1.015),
+      opacity: (0.13 * (1 - i / 6)).toFixed(3),
+    }, 'swp'));
+  gBody.appendChild(sweep);
 
   gRing.appendChild(el('circle', { r: hRing }, 'gui'));
   gRing.appendChild(el('circle', { r: inner }, 'gui'));
@@ -461,7 +496,8 @@ function restWheel(){
   gsap.set('#deck', { clearProps: 'all' });
   gsap.set('.lay>svg', { opacity: 1 });
   gsap.set('.sec,.ci,.glyph,.xname,.cname,.hnum,.mark,.body',
-           { clearProps: 'opacity,scale,transform,transformOrigin' });
+           { clearProps: 'opacity,scale,rotation,transform,transformOrigin' });
+  gsap.set('#lay-body .sweep', { opacity: 0 });   // 不演的时候光带不留在盘上
   disarm([...document.querySelectorAll('.gui,.spoke,.asp')]);
 }
 
@@ -509,16 +545,41 @@ function flyIn(fast){
                   stagger: .02 }, .45)
     .to('.glyph,.xname,.cname,.hnum,.mark',
         { opacity: 1, duration: .45, stagger: .016 }, .62)
-    // 行星最后落位，一颗一颗弹进宫里。缩放原点取各自的圆心 ——
-    // 用 bbox 会被旁边那行度数标签拽偏。
+    /* 行星沿着圈荡进来，不是原地弹出来。
+       绕的是盘心（svgOrigin 0 0），所以它们是从各自位置逆着走
+       二十多度再荡回去 —— 看着像行星在轨道上就位，
+       而不是几个点凭空长出来。缩放另配一个小的回弹。 */
     .fromTo('.body',
-      { opacity: 0, scale: .22,
-        svgOrigin: (i, t) => t.dataset.x + ' ' + t.dataset.y },
-      { opacity: 1, scale: 1, duration: .5, ease: 'back.out(2.6)',
-        stagger: .05 }, .95)
+      { opacity: 0, rotation: -24, svgOrigin: '0 0' },
+      { opacity: 1, rotation: 0, duration: .72,
+        ease: 'back.out(1.5)', stagger: .055 }, .92)
+    // 度数从 0 数到实际值。细节，但它让人相信这是算出来的，不是查表查来的
+    .add(countUp, 1.0)
     // 相位线最后连起来：先有星，才谈得上星与星之间
     .to(asps, { strokeDashoffset: 0, duration: .7, ease: 'power1.out',
-                stagger: .018 }, 1.3);
+                stagger: .018 }, 1.32)
+    /* 光带绕一圈。放在最后一段起手，扫过时盘已经立起来了 ——
+       提前扫的话它是斜的，看着像个椭圆。 */
+    .fromTo('#lay-body .sweep',
+      { rotation: 0, opacity: 0, svgOrigin: '0 0' },
+      { rotation: 372, opacity: 1, duration: 1.5, ease: 'power1.inOut',
+        svgOrigin: '0 0' }, .55)
+    .to('#lay-body .sweep', { opacity: 0, duration: .45 }, 1.75);
+}
+
+/** 度数从 0 数上去。八十毫秒一档，一秒之内数完，不拖。 */
+function countUp(){
+  const list = [...document.querySelectorAll('#lay-body .bdeg')];
+  if (!list.length) return;
+  const t0 = performance.now(), D = 850;
+  const step = () => {
+    const k = Math.min(1, (performance.now() - t0) / D);
+    const e = 1 - Math.pow(1 - k, 3);
+    for (const n of list) n.textContent = Math.round(+n.dataset.v * e) + '°';
+    if (k < 1) requestAnimationFrame(step);
+    else for (const n of list) n.textContent = n.dataset.v + '°';
+  };
+  step();
 }
 
 /* 鼠标带着盘轻微转头。幅度压得很小（左右 13 度、上下 9 度）——
@@ -589,6 +650,8 @@ const key = o => plain ? o.kp : o.kt;
    说人话版在后面补一段注，把「葆旅」「水衡」这类今天没人用的词讲明白。
    不把占辞改写成第二人称：中国星占本来就不算个人，改了就是编造。 */
 const zhanOf = m => m.zhan + (plain && m.zhanP ? '　' + m.zhanP : '');
+/* 取两种口吻里的那一份。原来写在 lines() 内部，mirror() 用不到它 —— 提到模块层。 */
+const dg = o => plain ? o.p : o.t;
 
 function brief(name){
   const b = chart.bodies[name];
@@ -775,16 +838,82 @@ function dignitiesOf(pn){
   return { hits, total };
 }
 
+/* ── 像不像你 ────────────────────────────────────
+   这一节是整页最先被读的东西，所以它得先过一关：让人认领。
+
+   前面那些节回答的是「你属于哪一类」。分类没人认领 ——
+   「你的核心自我带着扛得住长期的事的底色」说的是对的，
+   但读的人不会拍腿。会让人拍腿的是另一种句子：
+   把外面看到的那个你和里面的实情摆在一起，让落差自己说话。
+
+       「别人夸你稳，其实你只是不敢在没准备好的时候开口。」
+
+   所以这一节不引用任何术语，也不给依据 —— 依据在后面几节，
+   点开哪一条都能追下去。这里只负责说人话。
+
+   写这一层唯一的纪律：每条都得带一处代价。
+   全是好话的段落没人认领，因为它读起来像在讨好谁。 */
+function mirror(L){
+  const M = DATA.mirror;
+  if (!M) return;                                  // 旧数据，跳过
+  const B = chart.bodies, S = DATA.signs;
+  const sn = n => S[B[n].sign].n;
+  const el = n => S[B[n].sign].el;
+  // 自成一类的行：这一节要比别处显眼，不能挤在 11px 的灰字里 —— 
+  // 它是整页最先被读到的东西。
+  const add = t => t && L.push(['m', t]);
+
+  L.push(['k', '像 不 像 你', null, null, 'always']);
+  L.push(['n', '下面几条不引术语，也不给依据 —— 依据在后面每一节里，'
+             + '想追哪条就点哪条。这里只回答一件事：这说的是不是你。']);
+
+  const T = topic;
+  if (T === 'all' || T === 'me'){
+    add(M.asc[sn('上升')]);
+    add(M.sun[sn('太阳')]);
+    add(M.moon[sn('月亮')]);
+    // 结构性的那几条：比单颗星更容易让人认领，因为它说的是矛盾
+    if (el('太阳') === el('月亮'))
+      add(M.chart.sun_moon_same.replace('{elem}', el('太阳')));
+    else
+      add(M.chart.sun_moon_clash
+            .replace('{sun}', sn('太阳')).replace('{moon}', sn('月亮')));
+    if (sn('上升') === sn('太阳')) add(M.chart.asc_sun_same);
+    const below = Object.entries(B)
+      .filter(([n, b]) => !['上升','天顶','北交点','南交点'].includes(n))
+      .filter(([, b]) => b.house <= 5).length;
+    add(below >= 6 ? M.chart.below : below <= 3 ? M.chart.above : null);
+  } else if (T === 'love'){
+    add(M.moon[sn('月亮')]);
+    add(dg(DATA.venus[sn('金星')]) + '。');
+    add(M.asc[sn('上升')]);
+  } else if (T === 'work'){
+    add(M.sun[sn('太阳')]);
+    add(dg(DATA.mc[chart.mcSign]) + '。');
+    add(M.saturn[B['土星'].house + 1]);
+  } else if (T === 'money'){
+    add(M.saturn[B['土星'].house + 1]);
+    add(M.sun[sn('太阳')]);
+  } else if (T === 'hard'){
+    add(M.saturn[B['土星'].house + 1]);
+    const per = ['太阳','月亮','水星','金星','火星','木星','土星']
+      .filter(n => dignitiesOf(n).hits.some(h => h[0] === '游离'));
+    if (per.length >= 5) add(M.chart.peregrine);
+    add(M.asc[sn('上升')]);
+  } else if (T === 'when'){
+    add(M.saturn[B['土星'].house + 1]);
+  }
+}
+
 function lines(){
-  const L = [];
+  let L = [];
   const B = chart.bodies, S = DATA.signs, M = DATA.mansions;
   const sName = n => S[B[n].sign].n;
   const SEVEN = ['太阳', '月亮', '水星', '金星', '火星', '木星', '土星'];
-  const dg = o => plain ? o.p : o.t;
 
   // ── 一 · 天象。两种盘共用，因为这一节根本不涉及读法。 ──
   const sky = () => {
-    L.push(['k', '一 · 出 生 时 的 天 象　【算】']);
+    L.push(['k', '出 生 时 的 天 象　【算】', null, null, 'sky']);
     L.push(['n', '这一节全部是从行星位置直接读出的天文量，不含任何解释。'
                 + '拿任何一份星历去对，数字应当对得上。']);
     L.push(['b',
@@ -817,11 +946,12 @@ function lines(){
     L.push(['n', '位置是算的，读法是传统的。下面每一节都标出处：'
                + '【算】是天文，【传】是传统说法，【传·有定规】是传统里'
                + '有固定对照表、能逐条核对的那部分。']);
+    mirror(L);
     sky();
 
     // ── 二 · 命主 ──
     const rb = B[chart.ruler];
-    L.push(['k', '二 · 命 主　【传】']);
+    L.push(['k', '命 主　【传】', null, null, 'me']);
     L.push(['n', '古典盘从命主星读起：上升星座的传统主星，'
                + '在这套体系里代表「此人自己」。近代盘改用现代主星，这里用传统的。']);
     L.push(['b', `上升 ${sName('上升')} ${B['上升'].deg.toFixed(2)}°　命主星 ${chart.ruler}`,
@@ -839,14 +969,14 @@ function lines(){
     }
 
     // ── 三 · 三要素 ──
-    L.push(['k', '三 · 三 要 素　【传】']);
+    L.push(['k', '三 要 素　【传】', null, null, 'me']);
     for (const n of ['太阳', '月亮', '上升'])
       L.push(['b', `${n} · ${sName(n)} ${B[n].deg.toFixed(2)}°`
                  + (n !== '上升' ? ` · 第 ${B[n].house + 1} 宫` : ''),
               compose(n), ['planet', n]]);
 
     // ── 四 · 必然尊贵 ──
-    L.push(['k', '四 · 七 政 的 必 然 尊 贵　【传·有定规】']);
+    L.push(['k', '七 政 的 必 然 尊 贵　【传·有定规】', null, null, 'hard']);
     L.push(['n', '古典占星里少数几条有固定对照表、能逐条核对的东西。'
                + '五种尊贵：庙（在自己的宫，+5）、旺（擢升之位，+4）、'
                + '三分性（按元素与昼夜，+3）、界（每宫分五段按度数，+2）、'
@@ -898,7 +1028,7 @@ function lines(){
     }
     const topEl = Object.entries(cnt.el).sort((a, b) => b[1] - a[1])[0];
     const topQ = Object.entries(cnt.q).sort((a, b) => b[1] - a[1])[0];
-    L.push(['k', '五 · 气 质 分 布　【传】']);
+    L.push(['k', '气 质 分 布　【传】', null, null, 'me']);
     L.push(['n', '按十颗星（不含上升、天顶与交点）落在哪一象、哪一模式来数。'
                + '数得出来，但「多了会怎样」是说法。']);
     L.push(['b', '四象　' + ['火','土','风','水'].map(e => `${e} ${cnt.el[e] || 0}`).join('　'),
@@ -907,7 +1037,7 @@ function lines(){
             dg(DATA.mode[topQ[0]])]);
 
     // ── 六 · 诸星所居 ──
-    L.push(['k', '六 · 诸 星 所 居　【传】']);
+    L.push(['k', '诸 星 所 居　【传】', null, null, 'detail']);
     for (const p of DATA.planets){
       if (['太阳', '月亮', '上升', '天顶', '南交点'].includes(p.n)) continue;
       const b = B[p.n];
@@ -918,7 +1048,7 @@ function lines(){
 
     // ── 七 · 相位 ──
     if (chart.asp.length){
-      L.push(['k', '七 · 相 位　【算 + 传】']);
+      L.push(['k', '相 位　【算 + 传】', null, null, 'detail']);
       L.push(['n', '相位是两星黄经的夹角落在特定角度附近。「差」是实际夹角，'
                  + '「容许」是它离标准角度多远 —— 越小越紧。'
                  + '入相＝还在收紧，出相＝已经散开，由一小时后的盘对比得出。'
@@ -941,7 +1071,7 @@ function lines(){
        最好的部分，是最坏的部分。 */
     const src = h => dg(DATA.source[h + 1]);
     const vb = B['金星'], mb = B['火星'];
-    L.push(['k', '八 · 感 情　【传】']);
+    L.push(['k', '感 情　【传】', null, null, 'love']);
     L.push(['n', '金星看你被什么吸引，火星看你怎么使劲，七宫与七宫主星看'
                + '伴侣的样子与从哪儿遇上，月亮看不设防的时候要什么。'
                + '下面每条都是「传统上认为」，说的是倾向，不是判决。']);
@@ -991,9 +1121,9 @@ function lines(){
     }
 
     /* ── 九 · 事业与钱 ─────────────────────────────────── */
-    L.push(['k', '九 · 事 业 与 钱　【传】']);
+    L.push(['k', '事 业　【传】', null, null, 'work']);
     L.push(['n', '天顶看别人从哪个方向认识你，十宫主星看机会从哪儿来，'
-               + '太阳看想成为什么，土星看必须扛的那部分，二宫看钱。'
+               + '太阳看想成为什么样的人。'
                + '天顶不是「你能干什么」，是「你被当成什么」。']);
     L.push(['b', `天顶 ${chart.mcSign} ${(chart.mc % 30).toFixed(1)}°`,
             dg(DATA.mc[chart.mcSign]) + '。',
@@ -1010,6 +1140,10 @@ function lines(){
             `你想成为的那个人，底子是「${key(S[B['太阳'].sign])}」；`
             + `这件事主要在${key(DATA.houses[B['太阳'].house])}那一块展开。`,
             ['planet', '太阳']]);
+    L.push(['k', '钱　【传】', null, null, 'money']);
+    L.push(['n', '二宫看钱与你自有的资源，宫主星落在哪看它从哪儿来；'
+               + '土星所在的那一块要慢慢熬，木星所在的那一块相对松。'
+               + '这里说的是路子与节奏，不是数目 —— 一张盘算不出数目。']);
     {
       const sb = B['土星'], sd = dignitiesOf('土星');
       L.push(['b', `土星 · ${sName('土星')} · 第 ${sb.house + 1} 宫　`
@@ -1041,7 +1175,7 @@ function lines(){
     const ymd = d => `${d.getUTCFullYear()} 年 ${d.getUTCMonth() + 1} 月`;
     const age = d => d.getUTCFullYear() - pick.y;
     const nowY = chart.now.date.getUTCFullYear();
-    L.push(['k', '十 · 时 机　【算 + 传】']);
+    L.push(['k', '时 机　【算 + 传】', null, null, 'when']);
     L.push(['n', '这一节的年份是算出来的：把行星推到它回到出生黄经的那一刻，'
                + '用平均周期估，再迭代收敛。说法才是传统的。'
                + '解法是粗扫加二分，误差在千分之一度以内。'
@@ -1089,14 +1223,14 @@ function lines(){
             + '与上面那个黄经是两套坐标下的同一个太阳。',
             ['xiu', B['太阳'].xiu]]);
 
-    L.push(['k', '二 · 命 宫 所 临　【传】']);
+    L.push(['k', '命 宫 所 临　【传】', null, null, 'always']);
     L.push(['n', '中式盘不设十二宫，改看上升点落在二十八宿的哪一宿。'
                + '宿度不等，所以「入宿几度」比「几宫几度」更要紧。']);
     L.push(['b', `命宫在${am.n}宿　入宿 ${B['上升'].rudu.toFixed(2)}°　宿广 ${am.deg.toFixed(1)}°`,
             `${am.n}宿属${am.xiang}，分野在${am.guo}（${am.zhou}）。${zhanOf(am)}`,
             ['xiu', B['上升'].xiu]]);
 
-    L.push(['k', '三 · 七 政 所 临　【传】']);
+    L.push(['k', '七 政 所 临　【传】', null, null, 'always']);
     L.push(['n', '七政即日月五星。每一条给出所临之宿、入宿度、该宿主何事、'
                + '以及分野配到地上的哪一国哪一州。占辞出自《史记·天官书》'
                + '《晋书·天文志》一路的旧说。']);
@@ -1109,7 +1243,7 @@ function lines(){
               ['planet', n]]);
     }
 
-    L.push(['k', '四 · 四 余 之 二　【传】']);
+    L.push(['k', '四 余 之 二　【传】', null, null, 'always']);
     L.push(['n', '四余为罗睺、计都、月孛、紫气。前二者即黄白交点，是算得出来的实点；'
                + '后二者古法各家不一，这里不列 —— 拿不准的宁可留白。']);
     for (const n of ['北交点', '南交点']){
@@ -1126,7 +1260,7 @@ function lines(){
       gs[m.guo] = (gs[m.guo] || 0) + 1;
     }
     const top = Object.entries(xc).sort((a, b) => b[1] - a[1])[0];
-    L.push(['k', '五 · 四 象 与 分 野　【传】']);
+    L.push(['k', '四 象 与 分 野　【传】', null, null, 'always']);
     L.push(['b', '四象　' + Object.entries(xc).map(([k, v]) => `${k} ${v}`).join('　'),
             `七政以${top[0]}为多。四象各主一方一季 —— `
             + '苍龙主春，朱雀主夏，白虎主秋，玄武主冬。']);
@@ -1136,6 +1270,27 @@ function lines(){
             + '某宿有异，应在某地，从来不是给个人算的。这里当一层地理注脚看。']);
   }
 
+  /* 按「我想问」筛。always 与 detail 的差别：always 是每个问题都该看的
+     （抬头、镜子、脚注），detail 是只有选「整张盘」时才铺开的细目。
+     筛完之后重编序号 —— 章节标题里本来就不带数字，就是为了这一步。 */
+  /* 不能叫 pick —— 模块层已经有一个 pick（日历选中的日期），
+     函数里再 const 一个同名的会把整个函数体拉进暂时性死区，
+     而这个函数前面正好用了 pick.y 算岁数。加完这段第一次跑就炸在这儿。 */
+  const kept = (() => {
+    if (mode !== 'west' || topic === 'all') return L;
+    let cur = 'always';
+    return L.filter(r => {
+      if (r[0] === 'k') cur = r[4] || 'all';
+      else if (r[0] === 'h') cur = 'always';
+      return cur === 'always' || cur === topic;
+    });
+  })();
+  let no = 0;
+  const CN = ['一','二','三','四','五','六','七','八','九','十','十一','十二'];
+  for (const r of kept)
+    if (r[0] === 'k' && r[4] !== 'always') r[1] = CN[no++] + ' · ' + r[1];
+
+  L = kept;
   L.push(['f', mode === 'west'
     ? '天象那一节是算的，可以拿任何星历核对。庙旺陷落有固定对照表，'
       + '相位的角度与松紧是算的 —— 这些都能查。至于「居陷力弱」「冲则拉扯」'
@@ -1350,6 +1505,24 @@ export function mount(){
   $('back').addEventListener('click', closePanel);
   addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
+  /* 我想问。选完只留那一节，并把「像不像你」换成对应的几条。 */
+  const askSel = $('askq');
+  for (const [k, label] of ASK){
+    const o = document.createElement('option');
+    o.value = k; o.textContent = label; askSel.appendChild(o);
+  }
+  const askHint = () => {
+    const row = ASK.find(a => a[0] === topic);
+    $('askhint').textContent = row ? row[2] : '';
+  };
+  askHint();
+  askSel.addEventListener('change', () => {
+    topic = askSel.value; askHint();
+    if (chart) runReading();
+    // 手机上解析栏是抽屉，选完问题当然是要看答案的
+    if (narrow.matches) document.body.classList.remove('read-off');
+  });
+
   /* 口吻：两个按钮，哪个亮着就是哪个。
      原来是顶栏上一个按钮来回换字 —— 反馈是「我都不知道要点这个」，
      而且单钮上那个词到底是当前状态还是点完的状态，界面上说不清。 */
@@ -1371,6 +1544,7 @@ export function mount(){
       document.querySelectorAll('#bar .seg button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
       mode = b.dataset.m;
+      document.body.classList.toggle('east', mode === 'east');
       closePanel(); draw(); flyIn(true); runReading();
     });
   });

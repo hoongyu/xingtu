@@ -39,7 +39,7 @@ function build(){
   if (!DATA) return;                       // 数据没到就点切换按钮，会炸在 DATA.cultures
   svg.innerHTML = '';
   const W = innerWidth, H = innerHeight;
-  svg.setAttribute('viewBox', `${-R*2.05} ${-R*2.05} ${R*4.1} ${R*4.1}`);
+  setVB(`${-R*2.05} ${-R*2.05} ${R*4.1} ${R*4.1}`);
   svg.setAttribute('preserveAspectRatio','xMidYMid meet');
 
   const gGui = document.createElementNS(NS,'g');
@@ -186,7 +186,6 @@ function build(){
     t.setAttribute('x', cx); t.setAttribute('y', cy - 14);
     t.setAttribute('text-anchor','middle');
     t.setAttribute('class','gname');
-    t.setAttribute('font-size', 13);
     t.textContent = g.name;
     gName.appendChild(t);
     g._label = t;
@@ -509,10 +508,31 @@ function frameOn(cx, cy, size, ms, bottomGap = 150){
   animateViewBox(vx, vy, size, size, ms);
 }
 
+/* 图上的字要保持屏幕上的大小不变。
+   全天图的 viewBox 是 1558 单位见方，桌面上按高度铺满只有 0.46 倍 ——
+   写 8px 的圈注在屏幕上就是 3.7px，星官名 13px 是 6px。
+   反馈「字有点太小」，最小的一批在这儿。
+   直接把 px 写大，缩进去看某一个星官时又会大得离谱（缩放能到四倍）。
+   所以每次 viewBox 一变就重算一个倒数系数写进 --sfs，
+   CSS 那边用 calc(Npx * var(--sfs)) —— 无论缩放到哪一档，
+   屏幕上的字号恒定。 */
+function setVB(v){
+  svg.setAttribute('viewBox', v);
+  const [, , w] = v.split(/\s+/).map(Number);
+  /* 不能用 clientWidth：那是 HTMLElement 的属性，svg 元素上恒为 0 —— 
+     第一版就是这么写的，--sfs 直接算成了 Infinity 再退回 1。
+     getBoundingClientRect 对 svg 有效。 */
+  const r = svg.getBoundingClientRect();
+  const k = Math.min(r.width, r.height) / w;
+  // 量不到尺寸时（页面还没布局、或窗口是 0）什么都不写，
+  // 让 CSS 里那个全天图档位的缺省值顶上，别覆盖成 1。
+  if (k > 0) svg.style.setProperty('--sfs', (1 / k).toFixed(3));
+}
+
 let vbAnim = null;
 function animateViewBox(x, y, w, h, ms){
   // rAF 在隐藏标签页里不触发；这里保底直接落位，可见时才逐帧补间
-  if (document.hidden){ svg.setAttribute('viewBox', [x,y,w,h].map(n=>n.toFixed(1)).join(' ')); return; }
+  if (document.hidden){ setVB([x,y,w,h].map(n=>n.toFixed(1)).join(' ')); return; }
   const cur = svg.getAttribute('viewBox').split(/\s+/).map(Number);
   const t0 = performance.now();
   if (vbAnim) cancelAnimationFrame(vbAnim);
@@ -520,7 +540,7 @@ function animateViewBox(x, y, w, h, ms){
   const step = now => {
     const t = Math.min(1, (now - t0) / ms), k = ease(t);
     const v = cur.map((c, i) => c + ([x,y,w,h][i] - c) * k);
-    svg.setAttribute('viewBox', v.map(n=>n.toFixed(1)).join(' '));
+    setVB(v.map(n=>n.toFixed(1)).join(' '));
     if (t < 1) vbAnim = requestAnimationFrame(step);
   };
   vbAnim = requestAnimationFrame(step);
@@ -592,7 +612,10 @@ if (CFG.text.siteLabel){
 }
 sel_site.addEventListener('change', () => { if (sel) close(); site = +sel_site.value; build(); });
 
-addEventListener('resize', () => { if (!sel) build(); });
+addEventListener('resize', () => {
+  if (!sel) build();
+  else setVB(svg.getAttribute('viewBox'));   // 缩进状态下只要改系数
+});
 
 // 数据会变，每次跟服务器核一下再决定用不用缓存
 /* ── 检索栏 ───────────────────────────────────────
