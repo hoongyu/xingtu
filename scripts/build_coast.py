@@ -1,14 +1,17 @@
-"""把公版海岸线裁成小地球用得上的那一点点。
+"""把公版地形裁成星图用得上的那一点点。
 
-小地球在星图页的天球模式下出现，直径一百七十像素。这么小的球上，
+两处要用：左下角那只小地球（直径一百七十像素），以及天球上叠的那层
+「地影」—— 把地上的轮廓投到天上去。两处都不大，
 Natural Earth 1:110m 已经细得看不出来了 —— 再简化一大截也认得出来，
 而体积能压掉一多半。
 
-源数据：world-atlas 的 land-110m.json（TopoJSON，54 KB），
-封装的是 Natural Earth，**公有领域，无任何使用限制**。
+源数据：world-atlas 的 land-110m.json（陆地，54 KB）与
+countries-110m.json（国界，105 KB），封装的都是 Natural Earth，
+**公有领域，无任何使用限制**。国界那份只取中国一国。
 源文件不进仓库（.geosrc/，已 gitignore），进仓库的只有裁完那份。
 要重跑时从这里取：
     https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json
+    https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json
 
 为什么不直接把 TopoJSON 丢给浏览器：那得带一个解码器，
 而且 TopoJSON 的弧共享结构对我们没用 —— 我们只画线，不填色、不做拓扑。
@@ -25,7 +28,8 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / '.geosrc' / 'land-110m.json'
-OUT = ROOT / 'web' / 'coast.json'
+SRC_C = ROOT / '.geosrc' / 'countries-110m.json'
+OUT = ROOT / 'web' / 'geo.json'
 
 TOL = 0.55          # 度。见文件头的换算
 MIN_PTS = 4         # 简化后不足这么多点的环直接丢（都是米粒大的小岛）
@@ -80,37 +84,59 @@ def rdp(pts, tol):
     return rdp(pts[:wi + 1], tol)[:-1] + rdp(pts[wi:], tol)
 
 
-def main():
-    if not SRC.exists():
-        raise SystemExit(
-            f'缺源数据 {SRC}\n'
-            '  取：curl -sL -o .geosrc/land-110m.json '
-            'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json')
-    topo = json.loads(SRC.read_text(encoding='utf-8'))
+def rings_of(topo, obj, pick=None):
+    """从一个 TopoJSON 对象里取出所有环。pick 给了就只取它选中的那些几何。"""
     arcs = decode(topo)
-
-    geoms = topo['objects']['land']['geometries']
-    rings = []
-    for g in geoms:
+    out = []
+    for g in topo['objects'][obj]['geometries']:
+        if pick and not pick(g):
+            continue
         polys = g['arcs'] if g['type'] == 'MultiPolygon' else [g['arcs']]
         for poly in polys:
             for r in poly:
-                rings.append(ring(arcs, r))
+                out.append(ring(arcs, r))
+    return out
 
-    raw = sum(len(r) for r in rings)
+
+def simplify(rings, tol=TOL):
     out = []
     for r in rings:
-        s = rdp(r, TOL)
+        s = rdp(r, tol)
         if len(s) >= MIN_PTS:
             # 扁平存 [lon, lat, lon, lat, …]，比嵌套数组省三成字节
             out.append([round(v, 2) for p in s for v in p])
-    kept = sum(len(o) // 2 for o in out)
+    return out
+
+
+def need(path, name):
+    if not path.exists():
+        url = 'https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/' + name
+        raise SystemExit('缺源数据 ' + str(path) + chr(10)
+                         + '  取：curl -sL -o .geosrc/' + name + ' ' + url)
+
+
+def main():
+    need(SRC, 'land-110m.json')
+    need(SRC_C, 'countries-110m.json')
+
+    land = rings_of(json.loads(SRC.read_text(encoding='utf-8')), 'land')
+    # 中国的疆域另画一色，所以单独取。Natural Earth 的 name 字段是 'China'。
+    cn = rings_of(json.loads(SRC_C.read_text(encoding='utf-8')), 'countries',
+                  lambda g: g.get('properties', {}).get('name') == 'China')
+    if not cn:
+        raise SystemExit('countries-110m 里没找到 China —— 上游改了字段名？')
+
+    raw = sum(len(r) for r in land) + sum(len(r) for r in cn)
+    # 国界比海岸线细，容差给一半，不然西边那几个折角会被抹平
+    out = {'land': simplify(land), 'china': simplify(cn, TOL / 2)}
+    kept = sum(len(o) // 2 for v in out.values() for o in v)
 
     OUT.write_text(json.dumps(out, separators=(',', ':')), encoding='utf-8')
     kb = OUT.stat().st_size / 1024
-    print(f'  环      {len(rings)} 条 -> 留下 {len(out)} 条')
+    print(f'  陆地    {len(land)} 环 -> {len(out["land"])} 环')
+    print(f'  中国    {len(cn)} 环 -> {len(out["china"])} 环')
     print(f'  顶点    {raw} -> {kept}  （{kept / raw * 100:.0f}%）')
-    print(f'  源      {SRC.stat().st_size / 1024:.0f} KB'
+    print(f'  源      {(SRC.stat().st_size + SRC_C.stat().st_size) / 1024:.0f} KB'
           f'   ->   产物 {kb:.0f} KB')
     print(f'  -> {OUT.name}')
 

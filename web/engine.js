@@ -93,6 +93,46 @@ function build(){
     t.textContent = label; gGui.appendChild(t);
   }
 
+  /* ── 地影：把地上的轮廓投到天上 ──────────────────
+     这一层跟星点不是一回事，所以画法也刻意不一样：
+     星与星官是金色的实线，这一层是青灰的细线、中国疆域是朱线，
+     十二州是朱点带名。一眼分得出「上面那层是天，底下那层是地」。
+
+     它回答的是分野真正在问的那个问题：这块天，压在地上的哪儿。
+     转球的时候两层一起转，对应关系是看得见的。
+
+     必须说明白：地球一天转一圈，「哪块天压在哪块地上」时时刻刻在变。
+     这一层不是天象，是一次对照 —— 固定在「选中那座城正当头」的那一瞬。 */
+  if (GEO && CFG.skyOf && CFG.VIEW && CFG.VIEW.mode === 'sphere'){
+    const pr = (la, lo) => {
+      const [ra, dec] = CFG.skyOf(la, lo, site);
+      return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
+    };
+    const gEarthSky = document.createElementNS(NS,'g');
+    gEarthSky.setAttribute('class','earthsky');
+    const put = (d, cls) => { if (!d) return;
+      const n = document.createElementNS(NS,'path');
+      n.setAttribute('d', d); n.setAttribute('class', cls);
+      gEarthSky.appendChild(n); };
+    put(segsToD(projectRings(GEO.land, pr)), 'skland');
+    put(segsToD(projectRings(GEO.china, pr)), 'skchina');
+    // 十二州：转到哪儿了得有名字才说得清
+    for (const z of (CFG.zhou || [])){
+      const q = pr(z.lat, z.lon);
+      if (!q) continue;
+      const c = document.createElementNS(NS,'circle');
+      c.setAttribute('cx', q[0].toFixed(1)); c.setAttribute('cy', q[1].toFixed(1));
+      c.setAttribute('r', 3.5); c.setAttribute('class','skzhou');
+      gEarthSky.appendChild(c);
+      const t = document.createElementNS(NS,'text');
+      t.setAttribute('x', q[0].toFixed(1)); t.setAttribute('y', (q[1] - 8).toFixed(1));
+      t.setAttribute('class','skzname'); t.textContent = z.n;
+      gEarthSky.appendChild(t);
+    }
+    // 插在参考圈之后、连线之前 —— 地在下，天在上
+    gGui.appendChild(gEarthSky);
+  }
+
   /* 观测地的天顶。
      它是**天球上的一个点**，不是屏幕中央的一个记号 ——
      第一版画死在原点，转了球它还赖在正中间，那当然不对。
@@ -306,7 +346,7 @@ function build(){
    两个问题挨着问才完整 —— 而且换观测地的时候，看得见球在转。
 
    正交投影，中心就是选中的那座城，所以那座城永远在正中。
-   海岸线由数据给（web/coast.json，公版 Natural Earth 简化而来）；
+   海岸线与中国疆域由数据给（web/geo.json，公版 Natural Earth 简化而来）；
    没有那份数据时只画经纬网 —— 三十七个地点的点本身就把中国的形状勾出来了，
    少了海岸线仍然认得出来，只是没那么好看。 */
 const ER = 62;                                   // 小球半径（px）
@@ -350,21 +390,13 @@ function drawEarth(){
     .join(' ');
   if (d) host.appendChild(mk('path', { d }, 'egrat'));
 
-  // 海岸线。有就画，没有就算了 —— 这一块是可选的
-  if (COAST){
-    const segs = [];
-    for (const poly of COAST){
-      let cur = [];
-      for (let i = 0; i < poly.length; i += 2){
-        const q = E.toXY(poly[i + 1], poly[i], ER);
-        if (q) cur.push(q); else if (cur.length > 1){ segs.push(cur); cur = []; }
-        else cur = [];
-      }
-      if (cur.length > 1) segs.push(cur);
-    }
-    const cd = segs.map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
-                   .join(' ');
+  // 海岸线与中国疆域。有就画，没有就算了 —— 这一块是可选的
+  if (GEO){
+    const pr = (la, lo) => E.toXY(la, lo, ER);
+    const cd = segsToD(projectRings(GEO.land, pr));
     if (cd) host.appendChild(mk('path', { d: cd }, 'ecoast'));
+    const nd = segsToD(projectRings(GEO.china, pr));
+    if (nd) host.appendChild(mk('path', { d: nd }, 'echina'));
   }
 
   // 三十七个观测地。选中的那个是朱色，别的压得很淡
@@ -407,13 +439,37 @@ function drawEarth(){
   host.appendChild(mk('circle', { r: ER }, 'elimb'));
 }
 
-/* 海岸线是可选数据。取不到就只画经纬网，不报错、不重试 ——
-   它是锦上添花，不该让一个网络抖动把整页拖住。 */
-let COAST = null;
-fetch('coast.json', { cache: 'no-cache' })   // 跟 astrodata.json 一个口径：不带指纹，靠协商缓存
+/* 地形是可选数据。取不到就只画经纬网，不报错、不重试 ——
+   它是锦上添花，不该让一个网络抖动把整页拖住。
+   {land: 陆地轮廓, china: 中国疆域}，都是扁平的 [lon,lat,lon,lat,…]。 */
+let GEO = null;
+fetch('geo.json', { cache: 'no-cache' })   // 跟 astrodata.json 一个口径：不带指纹，靠协商缓存
   .then(r => r.ok ? r.json() : null)
-  .then(j => { if (j && j.length){ COAST = j; if (CFG.VIEW && CFG.VIEW.mode === 'sphere') drawEarth(); } })
+  .then(j => {
+    if (!j || !j.land) return;
+    GEO = j;
+    if (CFG.VIEW && CFG.VIEW.mode === 'sphere'){ drawEarth(); build(); }
+  })
   .catch(() => {});
+
+/** 把一组扁平经纬折线投到某个平面上，背面断开。
+    proj 给 [x,y] 或 null（表示这一点在背面）。 */
+function projectRings(rings, proj){
+  const segs = [];
+  for (const poly of rings){
+    let cur = [];
+    for (let i = 0; i < poly.length; i += 2){
+      const q = proj(poly[i + 1], poly[i]);
+      if (q) cur.push(q);
+      else { if (cur.length > 1) segs.push(cur); cur = []; }
+    }
+    if (cur.length > 1) segs.push(cur);
+  }
+  return segs;
+}
+const segsToD = segs => segs
+  .map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
+  .join(' ');
 
 /* ── 转球 ────────────────────────────────────────
    为什么拖的时候画到 canvas，松手才回 SVG：量过。
@@ -470,6 +526,30 @@ function paintSpin(){
     ctx.globalAlpha = CFG.visible(f, tierV) ? CFG.dim(f) : .12;
     ctx.beginPath(); ctx.arc(x, y, CFG.radius(f), 0, 6.2832); ctx.fill();
   }
+  // 地影也要跟着画，不然一拖它就消失，而它正是要看的东西
+  if (GEO && CFG.skyOf){
+    const pr = (la, lo) => {
+      const [ra, dec] = CFG.skyOf(la, lo, site);
+      return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
+    };
+    const stroke = (rings, color, w) => {
+      ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.beginPath();
+      for (const sg of projectRings(rings, pr))
+        sg.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]));
+      ctx.stroke();
+    };
+    stroke(GEO.land, 'rgba(126,166,182,.34)', 1);
+    stroke(GEO.china, 'rgba(212,97,79,.62)', 1.5);
+    ctx.fillStyle = 'rgba(212,97,79,.9)';
+    for (const z of (CFG.zhou || [])){
+      const q = pr(z.lat, z.lon);
+      if (!q) continue;
+      ctx.beginPath(); ctx.arc(q[0], q[1], 3.5, 0, 6.2832); ctx.fill();
+    }
+    ctx.fillStyle = '#e8e2d4';
+  }
+
   ctx.globalAlpha = 1;
   ctx.strokeStyle = 'rgba(217,180,95,.42)';
   ctx.lineWidth = 1.1;
@@ -543,8 +623,10 @@ function bindView(){
      当成 bar 的子元素，flex-wrap 会自己换行。 */
   const seg = document.createElement('div');
   seg.className = 'seg viewseg';
-  seg.innerHTML = '<button data-v="flat" class="on">平 面</button>'
-                + '<button data-v="sphere">天 球</button>';
+  const sph = CFG.VIEW.mode === 'sphere';
+  seg.innerHTML = `<button data-v="flat"${sph ? '' : ' class="on"'}>平 面</button>`
+                + `<button data-v="sphere"${sph ? ' class="on"' : ''}>天 球</button>`;
+  document.body.classList.toggle('sphere', sph);
   const bar = document.getElementById('bar');
   const cultSeg = bar.querySelector(':scope > .seg');
   bar.insertBefore(seg, cultSeg ? cultSeg.nextSibling : bar.lastElementChild);
@@ -1156,12 +1238,17 @@ fetch(CFG.data, {cache:'no-cache'}).then(r => r.json()).then(d => {
   document.getElementById('back').textContent = CFG.text.back;
   document.getElementById('srcbody').innerHTML = CFG.credits;
   document.getElementById('hint').textContent = CFG.text.hint(culture);
-  const seg = document.querySelector('.seg');
+  const seg = document.querySelector('#bar > .seg:not(.viewseg)');
   seg.innerHTML = CFG.cultures.map(([k, label], i) =>
     `<button data-c="${k}"${i === 0 ? ' class="on"' : ''}>${label}</button>`).join('');
   bindSeg();
   buildIndex();
   renderSecs();
+  /* 首次建图之前先把天顶摆到当前观测地。
+     不做这一步，ZENITH 还停在默认值，地影那一层与天顶记号
+     会按一个谁也不在的地方去算 —— 默认开天球之后这就不是小事了。 */
+  if (CFG.faceSite && CFG.sites && CFG.VIEW && CFG.VIEW.mode === 'sphere')
+    CFG.faceSite(CFG.sites[site].lat, site);
   build();
 });
 }
