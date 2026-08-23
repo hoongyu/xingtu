@@ -4,7 +4,7 @@
  * 画几道参考圈、悬停显示什么、面板统计什么。引擎不认「星等」也不认
  * 「赤纬」，那些语义全在这里。
  */
-import { BY_LAT, label } from './places.js?v=3deca637';
+import { BY_LAT, label, ZHOU } from './places.js?v=b86c1abc';
 
 const R = 380;                     // 图面半径，引擎也用它
 const rad = d => d * Math.PI / 180;
@@ -28,7 +28,22 @@ export const VIEW = { mode: 'flat', lon: 0, lat: 32 };
 
    赤经方向不跟着动：那要看时刻，而这是一张星图不是一台天象仪，
    没有「现在几点」。所以左右转由你自己拖。 */
-export function faceSite(lat){ VIEW.lat = Math.max(-89, Math.min(89, lat)); }
+/* 天顶是**天球上的一个点**，不是屏幕中央的一个记号。
+   第一版把它画死在原点，于是转了球它还赖在正中间 —— 那当然不对：
+   一转开，你正对着的就不再是那座城头顶那块天了，
+   天顶应该跟着别的星一起挪到边上去，转到背面就该看不见。
+
+   所以这里记的是它在天上的坐标：赤纬 = 当地纬度（这是定义），
+   赤经取「摆正的那一刻」的视线赤经。之后你怎么拖，这个点都不动 ——
+   动的是你的视线。 */
+export const ZENITH = { ra: 0, dec: 32, site: 0 };
+
+export function faceSite(lat, idx){
+  VIEW.lat = Math.max(-89, Math.min(89, lat));
+  ZENITH.dec = VIEW.lat;
+  ZENITH.ra = VIEW.lon;              // 摆正的这一刻，视线赤经就是天顶赤经
+  if (idx != null) ZENITH.site = idx;
+}
 
 /** 北极方位等距投影 —— 苏州石刻的形制。
  *  r 正比于天极距，赤经决定方位角。上北、右西（赤经自右向左递增）。*/
@@ -200,7 +215,7 @@ export const CFG = {
      引擎拿到的是 CFG 这个对象，模块的其它导出它看不见。
      第一版只写了 export function faceSite，于是换观测地时
      标签换了、球没转：CFG.faceSite 是 undefined，那个 if 直接跳过。 */
-  VIEW, faceSite,
+  VIEW, faceSite, ZENITH,
 
   /* 小地球。天球回答「你头顶上是什么」，它回答「你站在哪」——
      两个问题挨着问才完整，而且换观测地时看得见球在转。
@@ -208,9 +223,21 @@ export const CFG = {
      正交投影，中心就是选中的那座城：所以那座城永远在正中，
      这就是「把这个城市放在地图中间」在球面上的准确做法。
      背面的点与线一律不画，跟天球那边同一套规矩。 */
+  zhou: ZHOU.map(z => ({ n: z[0], city: z[1], lat: z[2], lon: z[3] })),
+
+  /* 小地球的中心，跟着天球一起转。
+     道理是这样：某一刻，赤经 α 正当头的地方，其地理经度就是 α 减去格林尼治
+     恒星时；所以视线赤经每挪 Δ，正下方那个地方的经度也挪 Δ。纬度那一头
+     更直接：视线赤纬就是正下方那地的纬度。
+
+     结果是：拖天球的时候，小地球同步在转，你能看见现在正对着的这块天，
+     底下压着的是地上哪儿 —— 这正是「转的时候看得见对应的地标」。
+     不拖的时候，中心就是选中的那座城，一点不差。 */
   earth(siteIdx){
     const st = this.sites[siteIdx];
-    const c = { lat: st.lat, lon: st.lon };
+    const c = { lat: VIEW.mode === 'sphere' ? VIEW.lat : st.lat,
+                lon: VIEW.mode === 'sphere'
+                     ? st.lon + (VIEW.lon - ZENITH.ra) : st.lon };
     const toXY = (lat, lon, r) => {
       const b = rad(lat), l = rad(lon - c.lon), b0 = rad(c.lat);
       const cosc = Math.sin(b0) * Math.sin(b) + Math.cos(b0) * Math.cos(b) * Math.cos(l);
@@ -218,7 +245,9 @@ export const CFG = {
       return [Math.cos(b) * Math.sin(l) * r,
               -(Math.cos(b0) * Math.sin(b) - Math.sin(b0) * Math.cos(b) * Math.cos(l)) * r];
     };
-    return { center: c, toXY, sites: this.sites };
+    return { center: c, toXY, sites: this.sites, zhou: this.zhou,
+             site: st, drifted: Math.abs(VIEW.lon - ZENITH.ra) > 0.5
+                              || Math.abs(VIEW.lat - ZENITH.dec) > 0.5 };
   },
 
   tipRows(hip, D, below){

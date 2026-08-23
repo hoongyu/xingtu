@@ -93,25 +93,31 @@ function build(){
     t.textContent = label; gGui.appendChild(t);
   }
 
-  /* 天顶。球面模式下它永远在正中间 —— 因为球就是绕着它转的。
-     标出来是为了回答一个具体问题：现在正对着我的这半个球，
-     是站在哪儿看到的。 */
-  if (CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites){
-    const st = CFG.sites[site];
-    const z = document.createElementNS(NS,'g');
-    z.setAttribute('class','zenith');
-    const mk = (t, a) => { const n = document.createElementNS(NS,t);
-      for (const k in a) n.setAttribute(k, a[k]); return n; };
-    z.appendChild(mk('circle', { r: 5 }));
-    z.appendChild(mk('circle', { r: 13, class: 'zring' }));
-    z.appendChild(mk('line', { x1: -20, y1: 0, x2: -13, y2: 0 }));
-    z.appendChild(mk('line', { x1: 13, y1: 0, x2: 20, y2: 0 }));
-    z.appendChild(mk('line', { x1: 0, y1: -20, x2: 0, y2: -13 }));
-    z.appendChild(mk('line', { x1: 0, y1: 13, x2: 0, y2: 20 }));
-    const t = mk('text', { x: 0, y: -26, class: 'zlabel' });
-    t.textContent = st.n + ' · 天顶';
-    z.appendChild(t);
-    gGui.appendChild(z);
+  /* 观测地的天顶。
+     它是**天球上的一个点**，不是屏幕中央的一个记号 ——
+     第一版画死在原点，转了球它还赖在正中间，那当然不对。
+     现在跟别的星一样投影：一转开就挪到边上，转到背面就不画。 */
+  if (CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites && CFG.ZENITH){
+    const Z = CFG.ZENITH;
+    const st = CFG.sites[Z.site] || CFG.sites[site];
+    if (!(CFG.cull && CFG.cull([Z.ra, Z.dec]))){
+      const [zx, zy] = project(Z.ra, Z.dec);
+      const z = document.createElementNS(NS,'g');
+      z.setAttribute('class','zenith');
+      z.setAttribute('transform', `translate(${zx.toFixed(1)} ${zy.toFixed(1)})`);
+      const mk = (t, a) => { const n = document.createElementNS(NS,t);
+        for (const k in a) n.setAttribute(k, a[k]); return n; };
+      z.appendChild(mk('circle', { r: 5 }));
+      z.appendChild(mk('circle', { r: 13, class: 'zring' }));
+      z.appendChild(mk('line', { x1: -20, y1: 0, x2: -13, y2: 0 }));
+      z.appendChild(mk('line', { x1: 13, y1: 0, x2: 20, y2: 0 }));
+      z.appendChild(mk('line', { x1: 0, y1: -20, x2: 0, y2: -13 }));
+      z.appendChild(mk('line', { x1: 0, y1: 13, x2: 0, y2: 20 }));
+      const t = mk('text', { x: 0, y: -26, class: 'zlabel' });
+      t.textContent = st.n + ' · 天顶';
+      z.appendChild(t);
+      gGui.appendChild(z);
+    }
   }
 
   if (CFG.VIEW && CFG.VIEW.mode === 'sphere') drawEarth();
@@ -361,20 +367,43 @@ function drawEarth(){
     if (cd) host.appendChild(mk('path', { d: cd }, 'ecoast'));
   }
 
-  // 三十七个地点。选中的那个是朱色，别的压得很淡
+  // 三十七个观测地。选中的那个是朱色，别的压得很淡
   E.sites.forEach((st, i) => {
     const q = E.toXY(st.lat, st.lon, ER);
     if (!q) return;
     host.appendChild(mk('circle', { cx: q[0].toFixed(1), cy: q[1].toFixed(1),
       r: i === site ? 3.4 : 1.5 }, i === site ? 'ehere' : 'espot'));
   });
-  const here = E.toXY(E.center.lat, E.center.lon, ER);
-  if (here){
-    host.appendChild(mk('circle', { cx: here[0], cy: here[1], r: 9 }, 'ehalo'));
-    const t = mk('text', { x: 0, y: ER + 14 }, 'elabel');
-    t.textContent = CFG.sites[site].n;
+
+  /* 十二州。转球的时候要能看见地标 —— 光有点没有名字，
+     转过去也不知道转到哪儿了。这十二个是分野配到地上的那十二州，
+     跟星盘页那张分野图是同一份数据（places.js 里的 ZHOU）。 */
+  if (E.zhou) for (const z of E.zhou){
+    const q = E.toXY(z.lat, z.lon, ER);
+    if (!q) continue;
+    host.appendChild(mk('circle', { cx: q[0].toFixed(1), cy: q[1].toFixed(1), r: 1.8 },
+                        'ezhou'));
+    const t = mk('text', { x: q[0].toFixed(1), y: (q[1] - 4).toFixed(1) }, 'ezname');
+    t.textContent = z.n;
     host.appendChild(t);
   }
+
+  // 选中那座城的光圈。转开之后它不再在正中，所以按投影位置画
+  const here = E.toXY(E.site.lat, E.site.lon, ER);
+  if (here) host.appendChild(mk('circle', { cx: here[0].toFixed(1),
+    cy: here[1].toFixed(1), r: 9 }, 'ehalo'));
+  const t = mk('text', { x: 0, y: ER + 14 }, 'elabel');
+  // 转开之后标题要说清楚现在正对着的是哪儿，不然读的人以为球没动
+  /* 转开之后标题要说清楚现在正对着哪儿，不然读的人以为球没动。
+     经度归一到 ±180 再按东西经写 —— 「-154°E」不是中文的说法。 */
+  if (E.drifted){
+    const la = E.center.lat, lo = (E.center.lon % 360 + 540) % 360 - 180;
+    t.textContent = `正对 ${la >= 0 ? '北纬' : '南纬'}${Math.abs(la).toFixed(0)}° `
+                  + `${lo >= 0 ? '东经' : '西经'}${Math.abs(lo).toFixed(0)}°`;
+  } else {
+    t.textContent = CFG.sites[site].n;
+  }
+  host.appendChild(t);
   host.appendChild(mk('circle', { r: ER }, 'elimb'));
 }
 
@@ -459,7 +488,7 @@ function paintSpin(){
 let spinPts = [];
 function bindSpin(){
   if (!CFG.rotatable) return;
-  let drag = null, raf = 0;
+  let drag = null, last = 0;
   const down = e => {
     if (!CFG.rotatable() || sel) return;      // 缩进某个星官时不转
     drag = { x: e.clientX, y: e.clientY, lon: CFG.VIEW.lon, lat: CFG.VIEW.lat };
@@ -480,7 +509,18 @@ function bindSpin(){
     const f = 180 / Math.max(240, Math.min(r.width, r.height));
     CFG.VIEW.lon = drag.lon + (e.clientX - drag.x) * f;
     CFG.VIEW.lat = Math.max(-89, Math.min(89, drag.lat + (e.clientY - drag.y) * f));
-    if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintSpin(); });
+    /* 按时间节流，不用 requestAnimationFrame。
+       现代浏览器的 pointermove 本来就跟刷新率对齐（还会合并），
+       再套一层 rAF 没有额外好处；而这个项目已经被「rAF 在隐藏标签页
+       不触发」坑过三回，交互路径上能不依赖它就不依赖。
+       12 ms 一次，约合八十帧，足够跟手。
+       小地球跟着一起重画 —— 这正是「转的时候看得见对应的地标」。
+       它两百来个元素，这个频率下不贵。 */
+    const now = performance.now();
+    if (now - last < 12) return;
+    last = now;
+    paintSpin();
+    drawEarth();
   };
   const up = () => {
     if (!drag) return;
@@ -516,7 +556,7 @@ function bindView(){
     CFG.VIEW.mode = b.dataset.v;
     // 一进天球就摆到当前观测地的天顶，别让人先看到一个不知道从哪看的球
     if (CFG.VIEW.mode === 'sphere' && CFG.faceSite && CFG.sites)
-      CFG.faceSite(CFG.sites[site].lat);
+      CFG.faceSite(CFG.sites[site].lat, site);
     document.body.classList.toggle('sphere', CFG.VIEW.mode === 'sphere');
     build();
   });
@@ -898,7 +938,7 @@ sel_site.addEventListener('change', () => {
   /* 天球模式下换观测地，把球转到那座城的天顶 ——
      天顶的赤纬恰好等于当地纬度，所以「把这座城摆到中间」有精确的意思。 */
   if (CFG.faceSite && CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites)
-    CFG.faceSite(CFG.sites[site].lat);
+    CFG.faceSite(CFG.sites[site].lat, site);
   build();
 });
 

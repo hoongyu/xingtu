@@ -33,7 +33,7 @@
    源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=552f1df1') format('woff2');
+  src:url('./wenkai-subset.woff2?v=347575f9') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -339,12 +339,19 @@ body:not(.rail-off) #railtoggle{left:212px}
   z-index:12;display:none;pointer-events:none;
 }
 body.sphere #earth{display:block}
-body.spinning #earth{opacity:.35}
+/* 拖动时不压暗：它现在正是要看的那样东西 */
+body.spinning #earth{opacity:1}
 .eball{fill:rgba(18,26,42,.72);stroke:none}
 .egrat{fill:none;stroke:rgba(232,226,212,.13);stroke-width:.7}
 .ecoast{fill:none;stroke:rgba(232,226,212,.42);stroke-width:.9;
   stroke-linejoin:round;stroke-linecap:round}
 .espot{fill:rgba(217,180,95,.5)}
+/* 十二州：转球时的地标。点小、名字也小，但要看得清 —— 
+   没有名字的话，转过去只是一堆点，不知道转到哪儿了。 */
+.ezhou{fill:rgba(212,97,79,.85)}
+.ezname{font-family:var(--song);font-size:8.5px;fill:rgba(232,226,212,.72);
+  text-anchor:middle;letter-spacing:.04em;paint-order:stroke;
+  stroke:rgba(10,14,24,.9);stroke-width:2.2}
 .ehere{fill:var(--zhu)}
 .ehalo{fill:none;stroke:var(--zhu);stroke-width:1;opacity:.6}
 .elimb{fill:none;stroke:rgba(232,226,212,.28);stroke-width:1}
