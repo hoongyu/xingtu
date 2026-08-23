@@ -15,7 +15,7 @@
  * · 天府与紫微以寅申为轴、紫微系六星逆行、天府系八星顺行，抽查全对
  * · 农历那一层（lunar.js）另有春节 29/29、闰月 10/10 的验证
  */
-import { toLunar } from './lunar.js?v=699142ab';
+import { toLunar } from './lunar.js?v=6a22c0e6';
 
 export const GAN = '甲乙丙丁戊己庚辛壬癸';
 export const ZHI = '子丑寅卯辰巳午未申酉戌亥';

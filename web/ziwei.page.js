@@ -11,7 +11,7 @@
    能做但会很难读，交给时间轴干净得多。 */
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import * as BIRTH from './birth.js?v=af8e9281';
-import { cast, ZHI, GAN } from './ziwei.js?v=14e7fb9d';
+import { cast, ZHI, GAN } from './ziwei.js?v=f9ac3cd5';
 import { PALACE_WHY, STAR_WHY, AUX_WHY, HUA_WHY, JU_WHY, STANCE,
          STAR_MIRROR, EMPTY_MIRROR, PALACE_SHORT } from './ziwei.text.js?v=8cb9b134';
 

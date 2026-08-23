@@ -757,7 +757,7 @@ async function makeDaily(){
   host.innerHTML = '<div id="cardwait">正 在 排 今 晚 …</div>';
   const [EPH, LUN, CARD] = await Promise.all([
     import('./ephem.js?v=e6ac781a'),
-    import('./lunar.js?v=699142ab'),
+    import('./lunar.js?v=6a22c0e6'),
     import('./card.js?v=bcea69a1'),
   ]);
   await CARD.ready();

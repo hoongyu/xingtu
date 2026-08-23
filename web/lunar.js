@@ -13,8 +13,16 @@
  *
  * 精度：朔的时刻由日月黄经差过零求得。月亮用的是截断的 ELP，
  * 误差约十角分，折合朔时约二十分钟 —— 只有当朔正好落在子夜前后
- * 二十分钟内才可能把初一算差一天。已用 1990–2026 年二十九个已知春节
- * 与十个已知闰月逐一核对，全中。
+ * 二十分钟内才可能把初一算差一天。
+ *
+ * 怎么验：**锚点验点，连续性验洞，两样都要。**
+ * 原来只有前者（已知春节、已知闰月，三十九个全中），而这两种锚点
+ * 都落在岁中，碰不到一岁的最后一个月 —— 那儿曾经有个洞：
+ * 最后一个月的上界写成 Infinity，于是每年十二月里冬至月开始之后的
+ * 十几到三十天被上一岁的十月吞掉，1999-12-20 算成「十月第 43 天」。
+ * 三十九个锚点一个都没踩到，而紫微盘的命宫、身宫、五行局跟着全错。
+ * 现在 scripts/check_lunar.mjs 逐日走 1950–2050：日序要么加一、
+ * 要么正好是新月的初一，月长只能是二十九或三十。CI 每次都跑。
  */
 import { compute } from './ephem.js?v=e6ac781a';
 
@@ -111,7 +119,10 @@ function sui(y){
     out.push({ start: m, month: num, leap: false });
     num = num % 12 + 1;
   });
-  return out;
+  /* end 必须一起给出去。months 用 m < m1 过滤，下一岁的十一月初一（m1）
+     不在里面，于是最后那个月在外面看没有上界 —— 少了它，
+     十二月里冬至月开始之后的日子会被上一岁的十月吞掉，日序一路数到四十几。 */
+  return { months: out, end: m1 };
 }
 
 const cache = new Map();
@@ -126,16 +137,24 @@ export function toLunar(ms){
   // 一个日期可能属于本岁或上一岁，两岁都试
   const gy = new Date(d * DAY).getUTCFullYear();
   for (const y of [gy, gy + 1]){
-    const ms_ = suiCached(y);
-    for (let i = ms_.length - 1; i >= 0; i--){
-      const s = cnDay(ms_[i].start);
+    const { months, end } = suiCached(y);
+    for (let i = months.length - 1; i >= 0; i--){
+      const s = cnDay(months[i].start);
       if (d >= s){
-        const next = i + 1 < ms_.length ? cnDay(ms_[i + 1].start) : Infinity;
+        /* 最后一个月的上界是**下一岁的十一月初一**，不是无穷。
+           上一版写的是 Infinity，于是十二月里冬至月开始之后的每一天
+           都被上一岁的十月收走：1999-12-20 算成「十月第 43 天」，
+           而农历一个月只有二十九或三十天。
+           实测 2015–2025 十一年，每年十二月都中招，共 257 天，
+           最离谱的数到第 68 天。落到这儿不返回就好 ——
+           外层会接着试下一岁，那一岁的头一个月正是十一月。 */
+        const next = i + 1 < months.length ? cnDay(months[i + 1].start) : cnDay(end);
         if (d < next){
-          // 农历年：正月初一起算。月序 ≥ 11 且在冬至之后的，属下一农历年之前
-          const yearStart = ms_.find(x => x.month === 1 && !x.leap);
+          // 农历年：正月初一起算。冬至之后到正月初一之前，仍算上一个农历年
+          const yearStart = months.find(x => x.month === 1 && !x.leap);
           const ly = d >= cnDay(yearStart.start) ? y : y - 1;
-          return { year: ly, month: ms_[i].month, leap: ms_[i].leap, day: d - s + 1 };
+          return { year: ly, month: months[i].month, leap: months[i].leap,
+                   day: d - s + 1 };
         }
       }
     }
@@ -145,6 +164,6 @@ export function toLunar(ms){
 
 /** 该农历年的正月初一（公历），用来核对。 */
 export function springFestival(y){
-  const s = suiCached(y).find(x => x.month === 1 && !x.leap);
+  const s = suiCached(y).months.find(x => x.month === 1 && !x.leap);
   return new Date(cnDay(s.start) * DAY);
 }
