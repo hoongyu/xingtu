@@ -69,17 +69,32 @@ function build(){
 
   /* 球面模式下三规不是圆而是折线（大圆看过去是椭圆，还有一半在背面），
      由配置算好 d 交过来。平面模式这里返回空数组，走下面的老路。 */
-  for (const [d, cls, label] of (CFG.ringPaths ? CFG.ringPaths(DATA, tierV) : [])){
+  /* 名字落在各自那道圈的顶点上。
+     上一版给四道圈写死同一个坐标，四个词叠在一处 —— 屏幕上只看得出
+     一个「圈」字，别的全糊了。位置现在由 ringPaths 连同路径一起给。 */
+  const ringLbl = [];
+  for (const [d, cls, label, at] of (CFG.ringPaths ? CFG.ringPaths(DATA, tierV) : [])){
     if (!d) continue;
     const q = document.createElementNS(NS,'path');
     q.setAttribute('d', d); q.setAttribute('class', cls);
     gGui.appendChild(q);
-    if (label){
-      const t = document.createElementNS(NS,'text');
-      t.setAttribute('class','gui-label');
-      t.setAttribute('x', 6); t.setAttribute('y', -R * 1.9);
-      t.textContent = label; gGui.appendChild(t);
-    }
+    if (!label) continue;
+    /* 中点撞在一起的两道圈还是有（低纬度下恒显圈和地平圈几乎相切），
+       撞了就往下让一行。--sfs 写在 svg 上，不在 :root —— 从 :root 读
+       只会拿到空串，退到 CSS 里那个缺省值。 */
+    let [lx, ly] = at || [6, -R * 1.9];
+    ly -= 10;
+    const em = 11 * (parseFloat(svg.style.getPropertyValue('--sfs')) || 2.2);
+    const halfW = n => n * em * 0.58;              // 字宽含 .16em 字距
+    for (let i = 0; i < 6 && ringLbl.some(
+           o => Math.abs(o[0] - lx) < halfW(o[2] + label.length)
+             && Math.abs(o[1] - ly) < em * 1.3); i++) ly += em * 1.4;
+    ringLbl.push([lx, ly, label.length]);
+    const t = document.createElementNS(NS,'text');
+    t.setAttribute('class','gui-label');
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('x', lx.toFixed(1)); t.setAttribute('y', ly.toFixed(1));
+    t.textContent = label; gGui.appendChild(t);
   }
 
   // 参考圈：星图是三规，概念图是抽象层级圈。半径由配置算。
@@ -571,9 +586,33 @@ function bindSpin(){
     if (!drag) return;
     e.preventDefault();
     const r = svg.getBoundingClientRect();
-    // 一个球宽拖满 = 转 180 度。这个手感跟大多数地球仪一致
-    const f = 180 / Math.max(240, Math.min(r.width, r.height));
-    CFG.VIEW.lon = drag.lon + (e.clientX - drag.x) * f;
+    /* 每像素转多少度，不是随手定的 —— 由「球心那一点要跟住手指」反解：
+         球心处转 1 弧度，画面上走 SR 个 viewBox 单位；
+         1 个 viewBox 单位 = (屏幕短边 / viewBox 宽) 个像素。
+       要让它走 1 像素，就得转 1/(SR·k) 弧度。
+       上一版按屏幕宽度取 180°/短边，跟球多大没关系，于是球心处
+       1 像素的手要跑出 1.43 像素 —— 拖起来球一直往前跑，抓不住。
+       离球心越远仍会跟不上（绕轴转的球本来就这样，除非改成 arcball），
+       但手感是由中间那块定的。 */
+    const vbW = parseFloat(svg.getAttribute('viewBox').split(/\s+/)[2]) || R * 4.1;
+    const k = Math.max(1, Math.min(r.width, r.height)) / vbW;
+    const f = 180 / Math.PI / (R * 1.86 * k);
+    /* 手感的定义：**你按住的是球上那一点，不是相机**。
+       手往哪儿走，那一点就跟着往哪儿走。
+
+       两个方向的符号是反的，这不是笔误。视线坐标转屏幕坐标时
+       （sky.config.js 的 ortho）横向直接取用、竖向取了反：
+           屏幕 x = +w[0]·SR      屏幕 y = −w[1]·SR
+       所以「让点跟着手走」这一条要求，落到 lon 和 lat 上正好一加一减。
+
+       上一版两个都是加号。那时球还是镜像的（横向也带负号），加号是对的；
+       后来把球的左右镜像改回来，这里漏改了 —— 于是上下跟手、左右反着走。 */
+    /* 横向还要再除一个 cos(纬度)：绕极轴转，球心那一点走的是**纬圈**，
+       半径是 SR·cos(纬度)，不是 SR。少了这一下，在柏林（北纬 52.5°）
+       横向只跟到 0.61 —— 实测正是 cos(52.52°)=0.608，一分不差。
+       贴近极点 cos 趋于零，这一除会炸，所以夹在 0.2（约 78 度）。 */
+    const cs = Math.max(0.2, Math.cos(drag.lat * Math.PI / 180));
+    CFG.VIEW.lon = drag.lon - (e.clientX - drag.x) * f / cs;
     CFG.VIEW.lat = Math.max(-89, Math.min(89, drag.lat + (e.clientY - drag.y) * f));
     /* 按时间节流，不用 requestAnimationFrame。
        现代浏览器的 pointermove 本来就跟刷新率对齐（还会合并），

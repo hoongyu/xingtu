@@ -226,6 +226,22 @@ export const CFG = {
      采样一度一点：三百六十个点，画出来的边缘看不出是折线。 */
   ringPaths: (D, lat) => {
     if (VIEW.mode !== 'sphere') return [];
+    /* 每道圈连同**它自己的落款位置**一起返回。
+       上一版只返回路径，引擎给所有圈的名字写死同一个坐标 ——
+       赤道、恒显圈、外规、地平圈四个词叠在一个点上，糊成两团黑，
+       第三格露出个「圈」字。反馈说「这写的是什么」，就是这个。
+       落款取**最长那一段的中点**。试过取「画面上最高的一点」，不行：
+       赤道在球上是个下垂的弧，它最高的两点正好在球缘 x=±707 处，
+       名字被顶到球外面去了。中点落在弧的正中，哪道圈都说得通。 */
+    const draw = pts => 'M' + pts.map(q => q[0].toFixed(1) + ' '
+                                          + q[1].toFixed(1)).join('L');
+    const pack = segs => {
+      const keep = segs.filter(sg => sg.length > 1);
+      if (!keep.length) return ['', null];
+      let best = keep[0];
+      for (const sg of keep) if (sg.length > best.length) best = sg;
+      return [keep.map(draw).join(' '), best[best.length >> 1]];
+    };
     const ring = dec => {
       const segs = []; let cur = [];
       for (let ra = 0; ra <= 360; ra += 1){
@@ -233,15 +249,13 @@ export const CFG = {
         else if (cur.length){ segs.push(cur); cur = []; }
       }
       if (cur.length) segs.push(cur);
-      return segs.filter(sg => sg.length > 1)
-        .map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
-        .join(' ');
+      return pack(segs);
     };
     const out = [
-      [ring(0), 'gui equator', '赤道'],
-      [ring(90 - lat), 'gui', '恒显圈'],
-      [ring(horizonDec(lat)), 'gui horizon', '外规'],
-    ];
+      [...ring(0), 'gui equator', '赤道'],
+      [...ring(90 - lat), 'gui', '恒显圈'],
+      [...ring(horizonDec(lat)), 'gui horizon', '外规'],
+    ].map(([d, at, cls, lb]) => [d, cls, lb, at]);
     // 观测地的地平圈：天顶九十度之外那一圈，就是那座城的地平线。
     // 它跟外规（永不升起的界）不是一回事：外规是赤纬的界，
     // 地平圈是此刻真正的「看得见到此为止」。
@@ -265,17 +279,14 @@ export const CFG = {
       }
       if (cur.length) horiz.push(cur);
     }
-    const hd = horiz.filter(sg => sg.length > 1)
-      .map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
-      .join(' ');
-    if (hd) out.push([hd, 'gui zenring', '地平圈']);
+    const [hd, hAt] = pack(horiz);
+    if (hd) out.push([hd, 'gui zenring', '地平圈', hAt]);
 
     // 球的边缘。它不是天上的圈，是「这个球到此为止」，所以单画一道。
     const limb = [];
     for (let a = 0; a <= 360; a += 2)
       limb.push([Math.cos(rad(a)) * R * 1.86, Math.sin(rad(a)) * R * 1.86]);
-    out.push(['M' + limb.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L') + 'Z',
-              'gui limb', '']);
+    out.push([draw(limb) + 'Z', 'gui limb', '', null]);
     return out;
   },
 

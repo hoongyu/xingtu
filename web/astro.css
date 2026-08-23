@@ -77,8 +77,13 @@ body:not(.rail-off) #wheel{padding-left:212px}
   pointer-events:none;font-family:var(--song);letter-spacing:.04em}
 .cname{font-size:calc(11.5px * var(--cfs));fill:rgba(217,180,95,.75);text-anchor:middle;
   pointer-events:none;font-family:var(--song);letter-spacing:.08em}
+/* 挪进内圈之后，相位连线会从字上穿过去 —— 描一圈底色把线挡开。
+   paint-order:stroke 让描边画在填充下面，字形本身不会被吃掉。
+   十二次名同样在这条内圈上，同样要挡。 */
+.cname{paint-order:stroke;stroke:var(--void);stroke-width:calc(3px * var(--cfs))}
 .hnum{font-size:calc(12px * var(--cfs));fill:var(--ink-dim);text-anchor:middle;
-  cursor:pointer;font-family:var(--hei)}
+  cursor:pointer;font-family:var(--hei);
+  paint-order:stroke;stroke:var(--void);stroke-width:calc(3px * var(--cfs))}
 .hnum:hover{fill:var(--gold)}
 .mark{font-size:calc(11px * var(--cfs));fill:var(--gold);text-anchor:middle;
   font-family:var(--song);letter-spacing:.18em;pointer-events:none}

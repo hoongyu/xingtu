@@ -310,6 +310,15 @@ function draw(){
   lay('lay-body').append(gBody);
 
   const outer = R, inner = R * .84, hRing = R * .70, ringP = R * .77;
+  /* 内圈让出来的一条题名半径。
+     西洋盘的宫位数字、中式盘的十二次名，原先都贴着**自己那条环带的中径**
+     —— 而那条中径正好就是行星环 ringP=261.8，行星点半径还有 15。
+     于是行星一走到宫（或次）的中段就把字压掉：实测默认那一份，
+     西洋盘四处相压（♇ 盖住「8」盖掉七成），中式盘八处（星纪、玄枵、
+     娵訾、降娄、大梁、鹑首、寿星全被盖）。
+     两边挪到同一条内圈上，既让开行星点，也让开度数那一圈（ringP−30）。
+     手机上字号翻倍、点也更大，要让得更多。 */
+  const nameR = hRing - (narrow.matches ? 42 : 26);
 
   if (mode === 'west'){
     DATA.signs.forEach((s, i) => {
@@ -330,7 +339,7 @@ function draw(){
       gSpoke.appendChild(el('line', { x1: x0, y1: y0, x2: x1, y2: y1 },
                             i % 3 === 0 ? 'spoke ax' : 'spoke'));
       const mid = off(cu + norm(chart.cusp[(i+1)%12] - cu) / 2);
-      const [hx, hy] = pos(mid, hRing + 16);
+      const [hx, hy] = pos(mid, nameR);
       const t = el('text', { x: hx, y: hy + 4 }, 'hnum');
       t.textContent = i + 1;
       t.addEventListener('click', () => show('house', i));
@@ -384,7 +393,7 @@ function draw(){
         `十二次　分野 ${c.fen}　含 ${c.xiu}宿`, DATA.cw, DATA.fw));
       p.addEventListener('mouseleave', hideCard);
       gRing.appendChild(p);
-      const [tx, ty] = pos(off(chart.xiuStart + i*30 + 15), (hRing + inner) / 2);
+      const [tx, ty] = pos(off(chart.xiuStart + i*30 + 15), nameR);
       const t = el('text', { x: tx, y: ty + 4 }, 'cname');
       t.textContent = c.n; gRing.appendChild(t);
     });
