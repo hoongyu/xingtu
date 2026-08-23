@@ -198,14 +198,19 @@ export const CFG = {
   R,
   data: 'skydata.json',
   culture: 'cn',
-  tier: 0,
+  /* 默认落在北京，不是列表第一档。
+     这个下拉按纬度从北往南排，而表里唯一的境外城市柏林在北纬 52.5 度，
+     正好排第一 —— 于是从微信点进来的人，看到的第一张天是柏林的。
+     排序本身是对的（那一栏的意思就是「纬度」），改的是起点。 */
+  tier: Math.max(0, BY_LAT.findIndex(p => p[1] === '北京')),
   cultures: [['cn', '中国星官'], ['iau', '西方星座']],
   /* 档位 = 观测地纬度。跟星盘页共用同一张地点表 ——
      那边取经度定上升，这边取纬度定外规。按纬度从北到南排，
      下拉从上往下走一遍，能看见南天那片星是怎么一点点沉下去的。 */
   tiers: BY_LAT.map(pl => [label(pl), pl[2]]),
   // 天球要用观测地的经纬度：纬度定天顶的赤纬，经度只用来在小地球上标点。
-  sites: BY_LAT.map(pl => ({ n: label(pl), city: pl[1], lat: pl[2], lon: pl[3] })),
+  sites: BY_LAT.map(pl => ({ n: label(pl), city: pl[1],
+                             lat: pl[2], lon: pl[3], tz: pl[4] })),
   pointSet: 'byCulture',      // 两套文化本来就用不同的星，取子集是对的
 
   project,

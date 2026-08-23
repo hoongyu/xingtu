@@ -13,7 +13,7 @@
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=186d15d4';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
-import * as CARD from './card.js?v=40590907';
+import * as CARD from './card.js?v=bcea69a1';
 import { toLunar } from './lunar.js?v=699142ab';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -140,6 +140,7 @@ function cast(){
   c.hsysFallback = hsys === 'placidus'
     && JSON.stringify(c.cusp) === JSON.stringify(houses('porphyry', c.asc, c.mc, lat, c.eps));
   c.y = pick.y; c.mo = pick.m; c.d = pick.d; c.hh = hh; c.mi = mm;
+  c.tz = tz + dst;                 // 卡片要拨那一天的别的时刻，得知道时区
   const names = DATA.planets.map(p => p.n)
     .filter(n => n !== '上升' && n !== '天顶' && n !== '南交点');
   c.asp = aspects(c.bodies, DATA.aspects, names)
@@ -611,44 +612,71 @@ async function makeCard(){
   await CARD.ready();
 
   const c = chart;
-  const L = toLunar(Date.UTC(c.y, c.mo - 1, c.d, c.hh - 8, c.mi));
+  const L = toLunar(Date.UTC(c.y, c.mo - 1, c.d, c.hh - c.tz, c.mi));
   const sName = n => DATA.signs[c.bodies[n].sign].n;
-  // 七政 + 上升，落在地平线以上的才画得出来
   const SEVEN = ['太阳', '月亮', '水星', '金星', '火星', '木星', '土星'];
-  const bodies = SEVEN.map(n => [n, c.bodies[n]]);
   // 星官连线只取有讲解的那些，不然圆窗里全是线
-  const cul = SKY.cultures.cn;
-  const groups = cul.groups.slice(0, 120).map(g => g.lines);
-
+  const groups = SKY.cultures.cn.groups.slice(0, 120).map(g => g.lines);
   const mirror = DATA.mirror && DATA.mirror.asc[sName('上升')];
-  const spec = {
-    title: '出 生 星 空',
-    side: '此 天 只 此 一 刻',
-    big: `${CARD.cnDigits(c.y)}年${CARD.cnSmall(c.mo)}月${CARD.cnSmall(c.d)}日`
-       + `　${CARD.cnSmall(c.hh)}时${c.mi ? CARD.cnSmall(c.mi) + '分' : ''}`,
-    sub: [
-      L ? `农历 ${L.year === c.y ? '' : L.year + '年 '}`
-          + `${L.leap ? '闰' : ''}${CARD.CN_M[L.month]}月${CARD.CN_D[L.day]}`
-          + `　${CARD.ZHI[Math.floor((c.hh + 1) / 2) % 12]}时` : '',
-      `${c.label}　${c.lat >= 0 ? '北纬' : '南纬'}${Math.abs(c.lat).toFixed(2)}°`
-      + ` ${c.lon >= 0 ? '东经' : '西经'}${Math.abs(c.lon).toFixed(2)}°`,
-      `节气 ${c.jieqi}　月相 ${c.phase}`,
-    ].filter(Boolean),
-    quote: mirror,
-    fine: [
-      `上升 ${sName('上升')} ${c.bodies['上升'].deg.toFixed(2)}°　`
-      + `太阳 ${sName('太阳')} ${c.bodies['太阳'].deg.toFixed(2)}°　`
-      + `月亮 ${sName('月亮')} ${c.bodies['月亮'].deg.toFixed(2)}°`,
-      `当地恒星时 ${hms(c.ramc)}　儒略日 ${c.jd.toFixed(4)}　`
-      + `黄赤交角 ${c.eps.toFixed(4)}°`,
-    ],
-    stance: '位置是算的，读法是传统的',
-    sky: { lst: c.ramc, lat: c.lat, stars: SKY.stars, groups, bodies },
+
+  const BORN = c.hh * 60 + c.mi;
+  const hm = m => `${CARD.cnSmall(Math.floor(m / 60))}时`
+                + (m % 60 ? CARD.cnSmall(m % 60) + '分' : '');
+
+  /* 这张卡的**身份**是出生那一刻，不随轴变：大字、上升太阳月亮、
+     那句话，说的都是你。轴拨的是**圆窗里那片天** ——
+     多数人生在白天，圆窗里其实看不到几颗星；往夜里拨一拨，
+     才第一次看见「我出生那天夜里的天是什么样」。
+     所以拨走之后 fine 那一行要写清楚圆窗画的是几点，不能含糊。 */
+  const specAt = m => {
+    const k = compute(c.y, c.mo, c.d, m / 60, c.tz, c.lat, c.lon);
+    const up = SEVEN.filter(n => {
+      const b = k.bodies[n], H = (k.ramc - b.ra) * Math.PI / 180,
+            dd = b.dec * Math.PI / 180, phi = c.lat * Math.PI / 180;
+      return Math.sin(dd) * Math.sin(phi) + Math.cos(dd) * Math.cos(phi) * Math.cos(H) > 0;
+    });
+    return {
+      title: '出 生 星 空',
+      side: '此 天 只 此 一 刻',
+      big: `${CARD.cnDigits(c.y)}年${CARD.cnSmall(c.mo)}月${CARD.cnSmall(c.d)}日`
+         + `　${CARD.cnSmall(c.hh)}时${c.mi ? CARD.cnSmall(c.mi) + '分' : ''}`,
+      sub: [
+        L ? `农历 ${L.year === c.y ? '' : L.year + '年 '}`
+            + `${L.leap ? '闰' : ''}${CARD.CN_M[L.month]}月${CARD.CN_D[L.day]}`
+            + `　${CARD.ZHI[Math.floor((c.hh + 1) / 2) % 12]}时` : '',
+        `${c.label}　${c.lat >= 0 ? '北纬' : '南纬'}${Math.abs(c.lat).toFixed(2)}°`
+        + ` ${c.lon >= 0 ? '东经' : '西经'}${Math.abs(c.lon).toFixed(2)}°`,
+        `节气 ${c.jieqi}　月相 ${c.phase}`,
+      ].filter(Boolean),
+      quote: mirror,
+      fine: [
+        `上升 ${sName('上升')} ${c.bodies['上升'].deg.toFixed(2)}°　`
+        + `太阳 ${sName('太阳')} ${c.bodies['太阳'].deg.toFixed(2)}°　`
+        + `月亮 ${sName('月亮')} ${c.bodies['月亮'].deg.toFixed(2)}°`,
+        (m === BORN ? '圆窗：出生那一刻' : `圆窗：这一天 ${hm(m)}`)
+        + `　地平线以上 ${up.length ? up.join('、') : '无'}`,
+        `当地恒星时 ${hms(k.ramc)}　儒略日 ${k.jd.toFixed(4)}　`
+        + `黄赤交角 ${c.eps.toFixed(4)}°`,
+      ],
+      stance: '位置是算的，读法是传统的',
+      sky: { lst: k.ramc, lat: c.lat, stars: SKY.stars, groups,
+             bodies: SEVEN.map(n => [n, k.bodies[n]]) },
+    };
   };
 
-  const cv = document.createElement('canvas');
-  CARD.draw(cv, spec, 2);
-  CARD.present(cv, `星空卡_${c.y}${String(c.mo).padStart(2,'0')}${String(c.d).padStart(2,'0')}.png`, host);
+  const ymd = `${c.y}${String(c.mo).padStart(2,'0')}${String(c.d).padStart(2,'0')}`;
+  CARD.mount(host, {
+    from: 0, to: 1435, step: 5, value: BORN, home: BORN,
+    spec: specAt,
+    name: m => `星空卡_${ymd}${m === BORN ? '' : '_'
+      + String(Math.floor(m / 60)).padStart(2,'0') + String(m % 60).padStart(2,'0')}.png`,
+    mark: m => m === BORN ? '出 生 那 一 刻'
+      : `那天 ${String(Math.floor(m / 60)).padStart(2,'0')}:${String(m % 60).padStart(2,'0')}`
+        + `　的天`,
+    homeText: '回 到 那 一 刻',
+    axisLabel: '拨到那天的哪个时辰',
+    alt: '出生星空卡',
+  });
 }
 
 /* ── 起盘动画与盘面深度 ─────────────────────────

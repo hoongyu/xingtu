@@ -40,30 +40,59 @@ def main():
     if '--base' in sys.argv:
         base = sys.argv[sys.argv.index('--base') + 1].rstrip('/') + '/'
 
-    # 模块内部的相对导入也要打戳。_headers 给 .js 设了一年不可变缓存，
-    # 漏掉的那个会被永久缓存住 —— 顺序不能反：先改引用，再算被改文件的哈希。
-    # places.js 被两个页面共用，两处引用都要打戳。
-    # 被依赖的那几个都是叶子（自己不再 import 别的带戳资源），
-    # 所以「先改引用、再算哈希」这个顺序仍然成立。
-    INNER = [('astro.js', 'ephem.js'), ('astro.js', 'places.js'),
-             ('astro.js', 'gsap.esm.js'), ('astro.js', 'card.js'),
-             ('astro.js', 'lunar.js'),
-             ('sky.config.js', 'places.js'),
-             # 字体在 CSS 里被 @font-face 引用，同样要打戳 ——
-             # 换了字体而 URL 不变的话，长缓存会把旧的锁死
-             ('engine.css', 'wenkai-subset.woff2'),
-             ('ziwei.css', 'wenkai-subset.woff2'),
-             ('ziwei.js', 'lunar.js'), ('lunar.js', 'ephem.js'),
-             ('ziwei.page.js', 'gsap.esm.js'), ('ziwei.page.js', 'ziwei.js'),
-             ('ziwei.page.js', 'ziwei.text.js')]
-    for host, dep in INNER:
+    """模块内部的相对导入也要打戳。_headers 给 .js 设了一年不可变缓存，
+    漏掉的那个会被永久缓存住 —— 而且没有任何报错，本地一切正常。
+
+    上一版这里是一张手写的 (引用方, 被引用) 对照表。它漏了 engine.js
+    那三条动态 import，于是 card.js 的引用长期挂在占位指纹 ?v=00000000：
+    打开过这个站的人永远拿不到新版卡片。ephem.js / lunar.js 那两条当时
+    手抄对了，纯属侥幸 —— 下一次改动照样静默过期。
+    CI 那道闸门也抓不到，因为它比的是 stamp 跑完有没有 diff，
+    而 stamp 压根不碰不在表里的那几行。
+
+    所以不再手写。扫一遍所有带戳资源的正文，凡是引到另一个带戳资源的
+    相对路径，一律改写。漏不掉，也不用记得维护。
+    """
+    def deps_of(name):
+        if not name.endswith(('.js', '.css')):
+            return set()
+        t = (W / name).read_text(encoding='utf-8')
+        # 只认引号里的相对路径 —— 放宽了会把注释里提到的文件名一起改掉。
+        # .css 里是 url(...)，.js 里是 import 的字符串，两种都覆盖。
+        got = set(re.findall(r"['\"(]\./([A-Za-z0-9_.-]+?)(?:\?v=[0-9a-f]+)?['\")]", t))
+        return {d for d in got if d in ASSETS and d != name}
+
+    DEPS = {a: deps_of(a) for a in ASSETS}
+
+    # 顺序不能反：先改引用，再算被改文件的哈希。所以要按拓扑序，
+    # 被依赖的先定下来。有环就直接断在这儿 —— 环意味着指纹无法收敛。
+    order, seen, mark = [], set(), {}
+    def visit(a, path):
+        if a in seen:
+            return
+        if mark.get(a):
+            raise SystemExit('资源之间有循环引用，指纹算不出来：'
+                             + ' -> '.join(path + [a]))
+        mark[a] = True
+        for d in sorted(DEPS[a]):
+            visit(d, path + [a])
+        mark[a] = False
+        seen.add(a); order.append(a)
+    for a in ASSETS:
+        visit(a, [])
+
+    inner = 0
+    for host in order:                       # 叶子在前，引用方在后
+        if not DEPS[host]:
+            continue
         hp = W / host
-        t = hp.read_text(encoding='utf-8')
-        # 只改引号里的相对导入路径 —— 放宽了会把注释里提到的文件名一起改掉
-        t2 = re.sub(r"'\./" + re.escape(dep) + r"(\?v=[0-9a-f]+)?'",
-                    f"'./{dep}?v={digest(dep)}'", t)
-        if t2 != t:
-            hp.write_text(t2, encoding='utf-8')
+        t = t0 = hp.read_text(encoding='utf-8')
+        for dep in sorted(DEPS[host]):
+            t = re.sub(r"(['\"(])\./" + re.escape(dep) + r"(?:\?v=[0-9a-f]+)?(['\")])",
+                       lambda m: f"{m.group(1)}./{dep}?v={digest(dep)}{m.group(2)}", t)
+        if t != t0:
+            hp.write_text(t, encoding='utf-8'); inner += 1
+    print(f'  内部引用   扫了 {len(ASSETS)} 个资源，改写 {inner} 个文件')
 
     tags = {a: digest(a) for a in ASSETS}
     for page in ('index.html', 'concept.html', 'astro.html', 'ziwei.html'):

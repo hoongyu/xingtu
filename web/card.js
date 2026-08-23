@@ -279,27 +279,103 @@ function wrap(c, text, w){
    微信内置浏览器把 <a download> 拦掉了，桌面浏览器则正常。
    所以两条路都留：能下就下，不能下就把图铺出来让人长按保存。
    这是中文场景里唯一靠得住的做法。 */
-export function present(cv, filename, host){
-  host.innerHTML = '';
-  cv.toBlob(blob => {
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.src = url; img.alt = filename;
-    img.className = 'cardimg';
-    host.appendChild(img);
+/* ── 一张能拨的卡 ────────────────────────────────
+   这两张卡原来是死图：点一下，出一张 PNG，看完存走。可它画的是
+   「那一刻的天」—— 而「那一刻」本来就该能挪。
 
-    const bar = document.createElement('div');
-    bar.className = 'cardbar';
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; a.textContent = '存 图';
-    a.className = 'cardsave';
-    const tip = document.createElement('span');
-    tip.className = 'cardtip';
-    tip.textContent = '手机上长按图片也能存';
-    bar.append(a, tip);
-    host.appendChild(bar);
-  }, 'image/png');
+   之所以敢让它整张跟着手指走，是先量过的：
+       EPH.compute 一次   0.02 ms
+       整张卡 draw 一次   2.1 ms   （1080 见方，1550 颗星，120 组连线）
+   一帧的预算是 16.7 ms。所以不用只重画圆窗、不用拆 API、不用节流，
+   拖的时候日期、农历、时辰、地平线以上有谁、恒星时，全都一起动。
+
+   静止时必须换回 <img>：微信里存图靠长按图片，canvas 长按不出菜单，
+   而微信是这个站的主入口。拖的时候才用 canvas —— 那一刻没人要存图。 */
+export function mount(host, o){
+  host.innerHTML = '';
+  const wrap = el('div', 'cardwrap live');   // 先显 canvas —— 真图还没出来
+  const cv = document.createElement('canvas');
+  cv.className = 'cardlive';
+  const img = new Image();
+  img.className = 'cardimg';
+  img.alt = o.alt || '星图卡片';
+  wrap.append(cv, img);
+  host.appendChild(wrap);
+
+  const axis = el('div', 'cardaxis');
+  const rng = document.createElement('input');
+  rng.type = 'range';
+  rng.min = o.from; rng.max = o.to; rng.step = o.step || 1; rng.value = o.value;
+  rng.className = 'cardrng';
+  rng.setAttribute('aria-label', o.axisLabel || '拨到哪一刻');
+  const row = el('div', 'cardmark');
+  const mark = el('span', 'cm');
+  const home = document.createElement('button');
+  home.type = 'button'; home.className = 'cmhome'; home.textContent = o.homeText || '回到此刻';
+  row.append(mark, home);
+  axis.append(rng, row);
+  host.appendChild(axis);
+
+  const bar = el('div', 'cardbar');
+  const a = document.createElement('a');
+  a.className = 'cardsave'; a.textContent = '存 图'; a.download = '';
+  const tip = el('span', 'cardtip');
+  tip.textContent = '手机上长按图片也能存';
+  bar.append(a, tip);
+  host.appendChild(bar);
+
+  /* 预览这一张画多大：屏幕上它顶多几百像素宽，1080 的底稿已经绰绰有余。
+     真按 devicePixelRatio 算出来常常不到 1，所以只往上取、不往下削。 */
+  const liveScale = () => {
+    const w = wrap.clientWidth || 420;
+    return Math.max(1, Math.min(2, w * (devicePixelRatio || 1) / 1080));
+  };
+
+  let url = null, timer = 0, token = 0;
+
+  const paint = () => {
+    const v = +rng.value;
+    mark.textContent = o.mark ? o.mark(v) : '';
+    home.hidden = (v === (o.home == null ? +o.value : o.home));
+    draw(cv, o.spec(v), liveScale());
+  };
+
+  /** 停下来了，才出真图。2160 见方，存下来发得出去。 */
+  const settle = () => {
+    const v = +rng.value, me = ++token;
+    const big = document.createElement('canvas');
+    draw(big, o.spec(v), 2);
+    big.toBlob(blob => {
+      if (me !== token) return;              // 又拨走了，这一张作废
+      const old = url;
+      url = URL.createObjectURL(blob);
+      img.onload = () => { if (old) URL.revokeObjectURL(old); };
+      img.src = url;
+      a.href = url; a.download = o.name(v);
+      wrap.classList.remove('live');
+    }, 'image/png');
+  };
+
+  const nudge = () => {
+    paint();
+    wrap.classList.add('live');
+    clearTimeout(timer);
+    // change 在个别触摸栈上不触发，留一道兜底
+    timer = setTimeout(settle, 240);
+  };
+  rng.addEventListener('input', nudge);
+  rng.addEventListener('change', () => { clearTimeout(timer); paint(); settle(); });
+  home.addEventListener('click', () => {
+    rng.value = o.home == null ? o.value : o.home;
+    clearTimeout(timer); paint(); settle();
+  });
+
+  paint();
+  settle();
+  return { rng };
 }
+
+function el(tag, cls){ const n = document.createElement(tag); n.className = cls; return n; }
 
 /** 字体没到就画，出来的是系统字 —— 这张卡的一半是字，等得起。 */
 export async function ready(){
