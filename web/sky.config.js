@@ -20,7 +20,8 @@ const rad = d => d * Math.PI / 180;
 // 默认就开天球：形状是对的那一张该先被看见，摊平的那张按需再切。
 /* t: 摊开进度，0 是球、1 是平面，只在过渡的那一秒里非零。
    mlat: 过渡中的临时视线纬度（先转正到 90 再摊开）。 */
-export const VIEW = { mode: 'sphere', lon: 0, lat: 32, t: 0, mlat: null };
+export const VIEW = { mode: 'sphere', lon: 0, lat: 32,
+                      t: 0, mlat: null, mir: null };
 
 /* 换观测地时把球转到那座城的天顶。
    天顶的赤纬**恰好等于观测地的纬度** —— 这不是近似，是定义：
@@ -96,9 +97,18 @@ export function depth(ra, dec){ return toView(vec(ra, dec))[2]; }
 /** 正交投影：直接取视线坐标的前两个分量。远近由第三个分量决定，
  *  但正交投影不做透视缩放 —— 那正是「从很远的地方看这个球」的样子，
  *  也是天球该有的样子：星星本来就无穷远。 */
+/* 球与平面的左右是**反的**，这不是笔误，是两样东西。
+
+   摊平那张是「站在地上抬头看」：苏州石刻的形制，西在右 ——
+   仰面朝天时东西本来就跟低头看地图相反。
+   球那张是「从外面看一只天球仪」：浑天仪、地球仪都是这么摆的，
+   东在右，跟平常看地图一个方向。
+
+   第一版把球也按平面那套取反了，于是投上去的中国是镜像的 ——
+   反馈说「看起来不像日常看的地图」，说得对。改回球该有的方向。 */
 function ortho(ra, dec){
   const w = toView(vec(ra, dec));
-  return [-w[0] * SR, -w[1] * SR];   // 取反保持右西上北，跟平面图一致
+  return [w[0] * SR, -w[1] * SR];
 }
 
 /* ── 摊开与卷起 ──────────────────────────────────
@@ -120,21 +130,33 @@ function ortho(ra, dec){
 
    为什么值得这么讲究：随手把两组屏幕坐标插值也能动，但那样南天的星
    会横着划过去 —— 看着像洗牌，不像摊开一张图。 */
-function morph(ra, dec, t, mlat){
-  const a = rad(ra) - Math.PI / 2;
+/** 角度插值走近路，不绕大圈。 */
+function lerpAng(a, b, k){
+  let d = ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  return a + d * k;
+}
+
+/* 摊开分两段，现在第一段多做一件事：**换手**。
+   球是从外面看（东在右），平面是抬头看（西在右），左右是反的 ——
+   所以中间必须翻一次面。翻这一下放在「转正」那一段里做：
+   那一段本来就在转，多一个翻面不突兀；
+   到第二段「摊开」开始时手已经换好，摊开仍然是纯粹的径向拉伸，
+   星星各走各的半径，不互相穿过去。 */
+function morph(ra, dec, t, mlat, mir){
+  const angF = rad(ra) - Math.PI / 2;                 // 平面那头的方位
   const w = toView3(vec(ra, dec), VIEW.lon, mlat);
-  // 球那头：正交投影后的极坐标半径（正对北极时恰好是 SR·cos(dec)）
+  const angS = Math.atan2(-w[1], w[0]);               // 球那头（已换手）
   const rs = Math.hypot(w[0], w[1]) * SR;
   const rf = (90 - dec) / 180 * R * 2;
   const r = rs * (1 - t) + rf * t;
-  /* 方位角：转正之后球上的方位角就是平面图的方位角，所以直接用平面那个。
-     没转正时（mlat 还在路上）用球上的实际方位，两头都连得上。 */
-  const ang = mlat > 89.5 ? a : Math.atan2(-w[1], -w[0]);
+  const ang = lerpAng(angS, angF, mir == null ? t : mir);
   return [Math.cos(ang) * r, Math.sin(ang) * r];
 }
 
 function project(ra, dec){
-  if (VIEW.t > 0) return morph(ra, dec, VIEW.t, VIEW.mlat);
+  if (VIEW.t > 0 || VIEW.mir != null)
+    return morph(ra, dec, VIEW.t, VIEW.mlat == null ? VIEW.lat : VIEW.mlat,
+                 VIEW.mir);
   if (VIEW.mlat != null && VIEW.mlat !== VIEW.lat) return orthoAt(ra, dec, VIEW.mlat);
   return VIEW.mode === 'sphere' ? ortho(ra, dec) : flat(ra, dec);
 }
@@ -261,17 +283,18 @@ export const CFG = {
      一颗前面的星和一颗背面的星投到同一个点上，谁也说不清哪个是哪个。
      球就该是不透明的。转过去看背面。 */
   cull: (f) => VIEW.mode === 'sphere' && VIEW.t === 0 && VIEW.mlat == null
+               && VIEW.mir == null
                && depth(f[0], f[1]) <= 0.015,
   /* 过渡中背面的星不剔除，改用透明度：摊开到一半时它们从边缘浮出来，
      这一下正是「原来球背面还有这么多」的那个瞬间。 */
   faceAlpha(f){
-    if (VIEW.t === 0 && VIEW.mlat == null) return 1;
+    if (VIEW.t === 0 && VIEW.mlat == null && VIEW.mir == null) return 1;
     const z = toView3(vec(f[0], f[1]), VIEW.lon,
                       VIEW.mlat == null ? VIEW.lat : VIEW.mlat)[2];
     if (z > 0.015) return 1;
     return Math.max(0, Math.min(1, VIEW.t * 1.6));
   },
-  morphing: () => VIEW.t > 0 || VIEW.mlat != null,
+  morphing: () => VIEW.t > 0 || VIEW.mlat != null || VIEW.mir != null,
   rotatable: () => VIEW.mode === 'sphere',
   /* 这几样必须挂在 CFG 上，不能只 export ——
      引擎拿到的是 CFG 这个对象，模块的其它导出它看不见。

@@ -120,6 +120,13 @@ function build(){
     put(segsToD(projectRings(GEO.land, pr)), 'skland');
     put(segsToD(projectRings(GEO.china, pr)), 'skchina');
     // 十二州：转到哪儿了得有名字才说得清
+    /* 十二州挤在中原那一小片，投到图上常常只占几十个像素 ——
+       名字全写出来会叠成一坨（第一版就是，截图里糊成一团）。
+       点全留，名字按距离取舍：离已放的名字太近就只留点。
+       间距按当前缩放折算成屏幕像素，不然缩放一变就又挤上了。 */
+    const sfs = parseFloat(svg.style.getPropertyValue('--sfs')) || 2.2;
+    const MINGAP = 26 * sfs;
+    const placedLbl = [];
     for (const z of (CFG.zhou || [])){
       const q = pr(z.lat, z.lon);
       if (!q) continue;
@@ -127,10 +134,11 @@ function build(){
       c.setAttribute('cx', q[0].toFixed(1)); c.setAttribute('cy', q[1].toFixed(1));
       c.setAttribute('r', 3.5); c.setAttribute('class','skzhou');
       gEarthSky.appendChild(c);
+      if (placedLbl.some(p2 => Math.hypot(p2[0]-q[0], p2[1]-q[1]) < MINGAP)) continue;
+      placedLbl.push(q);
       const t = document.createElementNS(NS,'text');
       t.setAttribute('x', q[0].toFixed(1)); t.setAttribute('y', (q[1] - 8).toFixed(1));
-      // 加个「古」字。这些是汉代的州，不是今天的地名 ——
-      // 不加的话「幽州」「益州」很容易被当成现在还在的地方。
+      // 加个「古」字。这些是汉代的州，不是今天的地名。
       t.setAttribute('class','skzname'); t.textContent = '古' + z.n;
       gEarthSky.appendChild(t);
     }
@@ -142,7 +150,10 @@ function build(){
      它是**天球上的一个点**，不是屏幕中央的一个记号 ——
      第一版画死在原点，转了球它还赖在正中间，那当然不对。
      现在跟别的星一样投影：一转开就挪到边上，转到背面就不画。 */
-  if (CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites && CFG.ZENITH){
+  /* 平面那张也标。它不按观测地居中 —— 那张图的中心永远是北天极，
+     这是等距方位投影的形制。但总得让人看见「我选的地方在哪儿」，
+     否则换城市屏幕上什么都不动，看着像坏了。 */
+  if (CFG.VIEW && CFG.sites && CFG.ZENITH && culture === 'cn'){
     const Z = CFG.ZENITH;
     const st = CFG.sites[Z.site] || CFG.sites[site];
     if (!(CFG.cull && CFG.cull([Z.ra, Z.dec]))){
@@ -650,7 +661,7 @@ function runMorph(toSphere, done){
   const V = CFG.VIEW;
   if (!V || morphing){ done(); return; }
   // 后台标签页里没有动画可言，直接落位
-  if (document.hidden){ V.t = toSphere ? 0 : 1; V.mlat = null; V.t = 0; done(); return; }
+  if (document.hidden){ V.t = 0; V.mlat = null; V.mir = null; done(); return; }
   morphing = true;
   document.body.classList.add('spinning');       // 借它藏 SVG、亮 canvas
   const lat0 = V.lat;
@@ -660,17 +671,22 @@ function runMorph(toSphere, done){
     // 摊开时 0→1，卷起时 1→0
     const p = toSphere ? 1 - k : k;
     if (p < .42){
-      // 转正段：把视线纬度推到 90，还没开始摊
-      V.mlat = lat0 + (90 - lat0) * easeInOut(p / .42);
+      /* 转正段：视线纬度推到 90，同时把左右换过来 ——
+         球是从外面看（东在右），平面是抬头看（西在右），中间必须翻面。
+         放在这一段做：它本来就在转，多一个翻面不突兀；
+         到摊开那一段手已经换好，摊开仍是纯粹的径向拉伸。 */
+      const q = easeInOut(p / .42);
+      V.mlat = lat0 + (90 - lat0) * q;
+      V.mir = q;
       V.t = 0;
     } else {
-      V.mlat = 90;
+      V.mlat = 90; V.mir = 1;
       V.t = easeInOut((p - .42) / .58);
     }
     paintSpin();
     if (k < 1) requestAnimationFrame(step);
     else {
-      V.t = 0; V.mlat = null;
+      V.t = 0; V.mlat = null; V.mir = null;
       morphing = false;
       document.body.classList.remove('spinning');
       done();
@@ -680,7 +696,7 @@ function runMorph(toSphere, done){
   // rAF 万一不触发（隐藏标签页切回来之前），兜一手别把页面卡在过渡态
   setTimeout(() => {
     if (!morphing) return;
-    V.t = 0; V.mlat = null; morphing = false;
+    V.t = 0; V.mlat = null; V.mir = null; morphing = false;
     document.body.classList.remove('spinning');
     done();
   }, MORPH_MS + 900);
@@ -1187,8 +1203,11 @@ sel_site.addEventListener('change', () => {
   site = +sel_site.value;
   /* 天球模式下换观测地，把球转到那座城的天顶 ——
      天顶的赤纬恰好等于当地纬度，所以「把这座城摆到中间」有精确的意思。 */
-  if (CFG.faceSite && CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites)
-    CFG.faceSite(CFG.sites[site].lat, site);
+  /* 两种模式都要重设锚点。平面那张虽然不按观测地居中（它是绕北天极的
+     等距方位投影，中心永远是天极 —— 这是这张图的形制，不是没做），
+     但**地影那一层是按观测地锚定的**：不重设的话，切了城市之后
+     那层地还挂在上一座城上，看着就是「选的地方不对」。 */
+  if (CFG.faceSite && CFG.sites) CFG.faceSite(CFG.sites[site].lat, site);
   build();
 });
 

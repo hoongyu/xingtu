@@ -12,7 +12,7 @@
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import { cast, ZHI, GAN } from './ziwei.js?v=14e7fb9d';
 import { PALACE_WHY, STAR_WHY, AUX_WHY, HUA_WHY, JU_WHY, STANCE,
-         STAR_MIRROR, EMPTY_MIRROR } from './ziwei.text.js?v=5cff0907';
+         STAR_MIRROR, EMPTY_MIRROR, PALACE_SHORT } from './ziwei.text.js?v=8cb9b134';
 
 const $ = id => document.getElementById(id);
 const CN_D = ['', '初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
@@ -302,84 +302,98 @@ function read(palace){
   L.push(['zn', palace ? '点盘上任何一宫，这里换成那一宫。'
                        : '预设看命宫。点盘上任何一宫，这里跟着换。']);
 
-  const pw = PALACE_WHY[P.name];
-  L.push(['zb', '这一宫管什么', pw[0] + pw[1]]);
+  /* 每一条都写成「依据 → 所以」。
+     依据是这一宫真实的排盘结果：干支、坐了哪几颗星、有没有四化；
+     所以是那一条落到人身上是什么样。
 
-  /* 照镜子那一段：依据在上，结论在下，一一对应。
-     依据就是这一宫真实的排盘结果 —— 干支、坐了哪几颗主星、有没有四化。
-     说得出「凭什么」，下面那句话才不是算命先生的话术。
-     只有命、夫妻、官禄、财帛四宫写了这一层，其余八宫仍看下面的分条。 */
+     反馈是「只有一项给了依据和所以，我想要每一项都有理有据」——
+     说得对。原来只有照镜子那一段是这个形状，主星、辅煞、大限、五行局
+     还是「词条 + 解释」的说明书口气。现在全部统一：
+     说得出凭什么，下面那句才不是算命先生的话术。
+
+     星的性情要跟「这一宫是哪一块」拼在一起才算数 ——
+     「七杀主开创」是分类，「你的亲密关系那一块必有一次大变动」才是话。 */
+  const SHORT = PALACE_SHORT[P.name] || P.name;
+  const gz = `${GAN[P.gan]}${ZHI[P.zhi]}`;
+  const at = extra => `${P.name}在${ZHI[P.zhi]}（${gz}）` + (extra || '');
+  const fill = t => t.replace(/\{宫\}/g, SHORT);
+  const say = (why, so) => L.push(['zm', why, so]);
+
+  const pw = PALACE_WHY[P.name];
+  say(at(P.isShen ? '，身宫同宫' : ''), pw[0] + pw[1]
+      + (P.isShen ? '　身宫也在这一宫：古法说命宫是先天、身宫是后天，'
+                  + '两者同宫的人，性情与作为比较一致，不太有「装」的余地。' : ''));
+
   const tbl = STAR_MIRROR[P.name];
   const mains = P.stars.filter(s => s.kind === '主');
-  if (tbl){
-    L.push(['zk', '像 不 像 你']);
-    if (!mains.length){
-      const opp = c.palaces.find(x => x.zhi === (P.zhi + 6) % 12);
-      const om = opp ? opp.stars.filter(s => s.kind === '主') : [];
-      L.push(['zm',
-        `${P.name}在${ZHI[P.zhi]}（${GAN[P.gan]}${ZHI[P.zhi]}）无主星`
-        + (om.length ? `　借对宫${opp.name}的 ${om.map(s => s.name).join('、')}`
-                     : ''),
-        EMPTY_MIRROR]);
-      for (const s of om)
-        if (tbl[s.name])
-          L.push(['zm', `借${s.name}${s.hua ? `（化${s.hua}）` : ''}`, tbl[s.name]]);
-    } else {
-      for (const s of mains)
-        if (tbl[s.name])
-          L.push(['zm',
-            `${P.name}在${ZHI[P.zhi]}（${GAN[P.gan]}${ZHI[P.zhi]}）坐${s.name}`
-            + (s.hua ? `，${s.name}化${s.hua}` : '')
-            + (mains.length > 1
-               ? `　同宫另有 ${mains.filter(x => x !== s).map(x => x.name).join('、')}`
-               : ''),
-            tbl[s.name]]);
-    }
-  }
+  const aux = P.stars.filter(s => s.kind !== '主');
+  const opp = c.palaces.find(x => x.zhi === (P.zhi + 6) % 12);
+  const oppMain = opp ? opp.stars.filter(s => s.kind === '主') : [];
 
-  if (!P.stars.length){
-    L.push(['zk', '空 宫']);
-    L.push(['zb', '此宫无星',
-      '传统上叫空宫，不作凶论 —— 改看对宫（隔六位那一宫）的星，'
-      + '谓之「借星安宫」。空宫的意思是这一块没有固定的脾气，'
-      + '更容易被别处牵着走。']);
-    const opp = c.palaces.find(p => p.zhi === (P.zhi + 6) % 12);
-    if (opp && opp.stars.length)
-      L.push(['zb', `对宫 ${opp.name}（${ZHI[opp.zhi]}）`,
-        '借过来看的是：' + opp.stars.map(s => s.name).join('、')]);
+  // ── 主星 ──
+  /* 命、夫妻、官禄、财帛四宫另有逐星写死的一段，比拼出来的贴身得多 ——
+     那一段用「像不像你」挂个名，别的宫就还叫主星。 */
+  const hasMirror = !!tbl && (mains.some(x => tbl[x.name])
+                              || oppMain.some(x => tbl[x.name]));
+  L.push(['zk', mains.length
+    ? (hasMirror ? '主 星 · 像 不 像 你' : '主 星')
+    : '空 宫 · 借 对 宫']);
+  if (!mains.length){
+    say(at('无主星') + (oppMain.length
+        ? `　对宫${opp.name}（${ZHI[opp.zhi]}）坐 ${oppMain.map(x => x.name).join('、')}`
+        : ''),
+      EMPTY_MIRROR);
+    for (const st of oppMain){
+      const w = STAR_WHY[st.name];
+      say(`借对宫的${st.name}${st.hua ? `（化${st.hua}）` : ''}`,
+          (tbl && tbl[st.name]) ? tbl[st.name] : fill(w[1]));
+    }
   } else {
-    const main = P.stars.filter(s => s.kind === '主');
-    const aux = P.stars.filter(s => s.kind !== '主');
-    if (main.length){
-      L.push(['zk', '主 星']);
-      for (const s of main){
-        const w = STAR_WHY[s.name];
-        L.push(['zb', s.name + (s.hua ? `　化${s.hua}` : ''), w[0] + w[1]]);
-        if (s.hua){
-          const h = HUA_WHY[s.hua];
-          L.push(['zn', h[0] + h[1]]);
-        }
+    for (const st of mains){
+      const w = STAR_WHY[st.name];
+      const why = at(`坐${st.name}`)
+        + (st.hua ? `，${st.name}化${st.hua}` : '')
+        + (mains.length > 1
+           ? `　同宫另有 ${mains.filter(x => x !== st).map(x => x.name).join('、')}`
+           : '');
+      // 命、夫妻、官禄、财帛四宫另有逐星写死的一段，比拼出来的更贴身
+      say(why, (tbl && tbl[st.name]) ? tbl[st.name] : fill(w[1]));
+      if (st.hua){
+        const h = HUA_WHY[st.hua];
+        say(`年干${c.ganzhi[0]}使${st.name}化${st.hua}，落在${P.name}`,
+            h[1].replace(/这一块|这一/g, m => m === '这一块' ? SHORT : '这一')
+            + `（${h[0]}）`);
       }
     }
-    if (aux.length){
-      L.push(['zk', '辅 煞']);
-      for (const s of aux)
-        L.push(['zb', s.name + (s.hua ? `　化${s.hua}` : ''), AUX_WHY[s.name] || '']);
-    }
   }
 
-  L.push(['zk', '大 限']);
-  L.push(['zb', `${P.daxian[0]} 至 ${P.daxian[1]} 岁`,
-    `大限自命宫起，起运岁即五行局数（此盘 ${c.ju}），每宫十年，`
-    + `${c.forward ? '顺' : '逆'}行 —— ${c.male ? '男' : '女'}命逢`
-    + `${c.ganzhi[0]}年（${c.forward ? '阳男阴女顺' : '阴男阳女逆'}）。`
-    + `走到这一宫时，传统上就把这一宫当作那十年的「命宫」来看。`]);
+  // ── 辅煞 ──
+  if (aux.length){
+    L.push(['zk', '辅 星 与 煞 星']);
+    for (const st of aux)
+      say(`${st.name}在${ZHI[P.zhi]}，与${P.name}同宫`
+          + (st.hua ? `，化${st.hua}` : ''),
+          (AUX_WHY[st.name] || '') + `落在${P.name}，说的就是${SHORT}这一块。`);
+  }
 
+  // ── 大限 ──
+  L.push(['zk', '大 限']);
+  say(`${P.daxian[0]} 至 ${P.daxian[1]} 岁　`
+    + `起运 ${c.ju} 岁（${c.juName}）　${c.forward ? '顺' : '逆'}行`
+    + `（${c.male ? '乾造' : '坤造'}逢${c.ganzhi[0]}年，`
+    + `${c.forward ? '阳男阴女顺' : '阴男阳女逆'}）`,
+    `这十年走到${P.name}。传统上把当值的那一宫当成那十年的「命宫」看 ——`
+    + `也就是说，${P.daxian[0]} 到 ${P.daxian[1]} 岁这一段，`
+    + `${SHORT}会被顶到你生活的正中间：`
+    + `不管你想不想，那些年的事多半绕着它转。`);
+
+  // ── 五行局 ──
   const ju = JU_WHY[c.ju];
   L.push(['zk', '五 行 局']);
-  L.push(['zb', ju[0], ju[1]]);
-  L.push(['zn', `五行局由命宫的纳音定：命宫 ${GAN[c.palaces[0].gan]}${ZHI[c.ming]}，`
-    + `纳音属${c.elem}，故为${c.juName}。局数同时决定安紫微的算法与起运岁。`]);
+  say(`命宫 ${GAN[c.palaces[0].gan]}${ZHI[c.ming]}，纳音属${c.elem}，`
+    + `故为${c.juName}（局数 ${c.ju}）`,
+    ju[1] + `局数同时决定两件事：安紫微怎么算，以及几岁起运 ——`
+    + `你是 ${c.ju} 岁起的，比火六局早、比水二局晚。`);
 
   L.push(['zf', '推法是有定规的，说法是传统的。'
     + '本站安紫微一步对照古法五个定局表逐日核过，一百五十项全中；'

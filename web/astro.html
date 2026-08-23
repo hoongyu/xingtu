@@ -9,7 +9,7 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
-<link rel="stylesheet" href="engine.css?v=375f1621">
+<link rel="stylesheet" href="engine.css?v=e092a47a">
 <link rel="stylesheet" href="astro.css?v=c812f10d">
 
 <canvas id="dust"></canvas>
@@ -23,7 +23,10 @@
 
 <div id="bar">
   <div id="title">星 盘</div>
-  <div id="nav"><a href="index.html">星 图</a><a href="concept.html">概 念</a><a href="astro.html" class="cur">星 盘</a><a href="ziwei.html">紫 微</a></div>
+  <!-- 概念星图暂时从导航里撤下（页面与数据都还在，web/concept.html）。
+     要放回来：在下面这行 nav 里加回
+     <a href="concept.html">概 念</a> —— 就这一处，别的什么都不用动。 -->
+<div id="nav"><a href="index.html">星 图</a><a href="astro.html" class="cur">星 盘</a><a href="ziwei.html">紫 微</a></div>
   <div class="seg" id="modeseg">
     <button data-m="west" class="on">西洋盘</button>
     <button data-m="east">中式盘</button>
