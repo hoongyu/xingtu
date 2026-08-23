@@ -123,10 +123,20 @@ function build(){
      那条理由只对十二州成立。十二州已经撤了，剩下的是海岸线与疆域，
      那是地理，不是星占：**站在哪儿看天，跟你用哪套星名没有关系**。
      反馈说「东方有当前位置坐标，西方星座就没有了」，说的正是这个。 */
+  /* 什么时候不画地上这一点：**只有天球有这个问题**。
+     球是不透明的，转到背面的就该看不见。
+     摊平的那张没有背面 —— 北极方位等距投影一次摊完整个天区，
+     连永不升起的那一片也在图上（星点也一样，只是压暗，并不剔除）。
+
+     上一版两张图共用了天球那条 depth 关，于是摊平的那张被无端切掉半个球。
+     柏林这一档实测：中国 277 个环里 61 个整环消失、972 个顶点掉 131 个，
+     而且全落在东经 110–115° —— 南海诸岛和十段线那一片正好整段没了。
+     反馈说「中国疆域没了一半」，说的就是这个。 */
   if (GEO && CFG.skyOf && CFG.VIEW){
     const pr = (la, lo) => {
       const [ra, dec] = CFG.skyOf(la, lo, site);
-      return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
+      return CFG.VIEW.mode !== 'sphere' || CFG.depth(ra, dec) > 0.015
+        ? CFG.project(ra, dec) : null;
     };
     const gEarthSky = document.createElementNS(NS,'g');
     gEarthSky.setAttribute('class','earthsky');
@@ -534,19 +544,32 @@ function paintSpin(){
   }
   // 地影也要跟着画，不然一拖它就消失，而它正是要看的东西
   if (GEO && CFG.skyOf){
-    const pr = (la, lo) => {
+    /* 正面背面分两次画。
+       纯拖球时背面那次 alpha=0，等于不画 —— 球不透明。
+       摊开的那一秒里让它从零淡进来，系数跟星点的 faceAlpha 一样是 t×1.6：
+       摊平之后地影是整张的，要是等最后 build() 一次补上，
+       南海那一片会在末一帧凭空跳出来。 */
+    const back = (CFG.morphing && CFG.morphing())
+      ? Math.max(0, Math.min(1, (CFG.VIEW.t || 0) * 1.6)) : 0;
+    const side = wantBack => (la, lo) => {
       const [ra, dec] = CFG.skyOf(la, lo, site);
-      return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
+      return (CFG.depth(ra, dec) > 0.015) === !wantBack
+        ? CFG.project(ra, dec) : null;
     };
-    const stroke = (rings, color, w) => {
+    const stroke = (rings, color, w, pr) => {
       ctx.strokeStyle = color; ctx.lineWidth = w;
       ctx.beginPath();
       for (const sg of projectRings(rings, pr))
         sg.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]));
       ctx.stroke();
     };
-    stroke(GEO.land, 'rgba(126,166,182,.34)', 1);
-    stroke(GEO.china, 'rgba(212,97,79,.62)', 1.5);
+    for (const [wantBack, a] of [[false, 1], [true, back]]){
+      if (a <= 0.01) continue;
+      ctx.globalAlpha = a;
+      stroke(GEO.land,  'rgba(126,166,182,.34)', 1,   side(wantBack));
+      stroke(GEO.china, 'rgba(212,97,79,.62)',  1.5, side(wantBack));
+    }
+    ctx.globalAlpha = 1;
   }
 
   ctx.globalAlpha = 1;
