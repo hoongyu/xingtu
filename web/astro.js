@@ -13,6 +13,8 @@
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=b86c1abc';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
+import * as CARD from './card.js?v=40590907';
+import { toLunar } from './lunar.js?v=699142ab';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
@@ -574,6 +576,70 @@ function drawFenye(){
     }, 'mark');
     t.textContent = txt; gEarth.appendChild(t);
   }
+}
+
+/* ── 出生星空卡 ──────────────────────────────────
+   一张能存下来发出去的图。为什么值得单做：
+   这一页算出来的东西是最私人的，而私人的东西才有人愿意发。
+   但它必须是**一张真的图片**——微信、小红书都只认图，
+   截网页那种糊糊的东西没人发。所以走 canvas，见 card.js。
+
+   圆窗里画的是真的天：那一刻、那个地方，地平线以上的星。
+   赤经赤纬换成地平高度与方位，天顶在圆心 —— 就是抬头看见的样子。
+   星表按需取（skydata.json 一百九十多 K），点了才下。
+
+   出生数据仍然不出这台机器：整张图在浏览器里画完，
+   toBlob 出来的 blob 也只在本地。 */
+let SKY = null;
+async function makeCard(){
+  const host = $('cardhost');
+  $('cardbox').classList.add('on');
+  host.innerHTML = '<div id="cardwait">正 在 排 星 空 …</div>';
+  if (!SKY){
+    try { SKY = await (await fetch('skydata.json', { cache: 'no-cache' })).json(); }
+    catch (_){ host.innerHTML = '<div id="cardwait">星表没取到，稍后再试</div>'; return; }
+  }
+  await CARD.ready();
+
+  const c = chart;
+  const L = toLunar(Date.UTC(c.y, c.mo - 1, c.d, c.hh - 8, c.mi));
+  const sName = n => DATA.signs[c.bodies[n].sign].n;
+  // 七政 + 上升，落在地平线以上的才画得出来
+  const SEVEN = ['太阳', '月亮', '水星', '金星', '火星', '木星', '土星'];
+  const bodies = SEVEN.map(n => [n, c.bodies[n]]);
+  // 星官连线只取有讲解的那些，不然圆窗里全是线
+  const cul = SKY.cultures.cn;
+  const groups = cul.groups.slice(0, 120).map(g => g.lines);
+
+  const mirror = DATA.mirror && DATA.mirror.asc[sName('上升')];
+  const spec = {
+    title: '出 生 星 空',
+    side: '此 天 只 此 一 刻',
+    big: `${CARD.cnDigits(c.y)}年${CARD.cnSmall(c.mo)}月${CARD.cnSmall(c.d)}日`
+       + `　${CARD.cnSmall(c.hh)}时${c.mi ? CARD.cnSmall(c.mi) + '分' : ''}`,
+    sub: [
+      L ? `农历 ${L.year === c.y ? '' : L.year + '年 '}`
+          + `${L.leap ? '闰' : ''}${CARD.CN_M[L.month]}月${CARD.CN_D[L.day]}`
+          + `　${CARD.ZHI[Math.floor((c.hh + 1) / 2) % 12]}时` : '',
+      `${c.label}　${c.lat >= 0 ? '北纬' : '南纬'}${Math.abs(c.lat).toFixed(2)}°`
+      + ` ${c.lon >= 0 ? '东经' : '西经'}${Math.abs(c.lon).toFixed(2)}°`,
+      `节气 ${c.jieqi}　月相 ${c.phase}`,
+    ].filter(Boolean),
+    quote: mirror,
+    fine: [
+      `上升 ${sName('上升')} ${c.bodies['上升'].deg.toFixed(2)}°　`
+      + `太阳 ${sName('太阳')} ${c.bodies['太阳'].deg.toFixed(2)}°　`
+      + `月亮 ${sName('月亮')} ${c.bodies['月亮'].deg.toFixed(2)}°`,
+      `当地恒星时 ${hms(c.ramc)}　儒略日 ${c.jd.toFixed(4)}　`
+      + `黄赤交角 ${c.eps.toFixed(4)}°`,
+    ],
+    stance: '位置是算的，读法是传统的',
+    sky: { lst: c.ramc, lat: c.lat, stars: SKY.stars, groups, bodies },
+  };
+
+  const cv = document.createElement('canvas');
+  CARD.draw(cv, spec, 2);
+  CARD.present(cv, `星空卡_${c.y}${String(c.mo).padStart(2,'0')}${String(c.d).padStart(2,'0')}.png`, host);
 }
 
 /* ── 起盘动画与盘面深度 ─────────────────────────
@@ -1782,6 +1848,11 @@ export function mount(){
     skipReveal();
   };
   $('read').addEventListener('click', skipHit);
+  $('cardbtn').addEventListener('click', () => { if (chart) makeCard(); });
+  $('cardclose').addEventListener('click', () => $('cardbox').classList.remove('on'));
+  $('cardbox').addEventListener('click', e => {
+    if (e.target === $('cardbox')) $('cardbox').classList.remove('on');
+  });
   $('skipall').addEventListener('click', () => skipReveal && skipReveal());
 
   $('railtoggle').addEventListener('click',

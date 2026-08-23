@@ -389,6 +389,44 @@ body.east #cnseg{display:flex}
 .zcenter{fill:var(--zhu);stroke:none}
 .gui.fydim{stroke:rgba(232,226,212,.10);stroke-dasharray:3 5}
 
+/* ── 星空卡 ───────────────────────────────────────
+   卡本身是 canvas 画的（见 card.js）。这里只管：一个入口、一层遮罩、
+   一张图铺在中间。图必须以 <img> 的形式出现 —— 微信里长按 canvas
+   存不下来，长按 img 可以。 */
+#cardbtn{
+  margin:22px 0 0;padding:13px 0;text-align:center;cursor:pointer;
+  font-family:var(--song);font-size:14px;letter-spacing:.3em;
+  color:var(--gold);border:1px solid rgba(217,180,95,.45);
+  transition:background .25s ease,color .25s ease;
+}
+#cardbtn:hover{background:var(--gold);color:var(--void)}
+body.tab-data #cardbtn{display:none}
+
+#cardbox{
+  position:fixed;inset:0;z-index:70;display:none;
+  background:rgba(3,5,9,.93);overflow-y:auto;
+  padding:34px 18px calc(34px + env(safe-area-inset-bottom));
+}
+#cardbox.on{display:block}
+.cbin{max-width:520px;margin:0 auto;position:relative}
+.cbin h3{
+  font-family:var(--song);font-size:15px;letter-spacing:.34em;
+  color:var(--gold);text-align:center;margin-bottom:18px;
+}
+#cardclose{
+  position:absolute;right:0;top:-6px;font-family:var(--song);font-size:14px;
+  letter-spacing:.28em;color:var(--zhu);cursor:pointer;padding:4px 8px;
+}
+.cardimg{display:block;width:100%;height:auto;box-shadow:0 18px 60px rgba(0,0,0,.7)}
+.cardbar{display:flex;align-items:center;gap:14px;margin-top:16px;justify-content:center}
+.cardsave{
+  font-family:var(--song);font-size:14px;letter-spacing:.3em;color:var(--void);
+  background:var(--gold);padding:11px 26px;text-decoration:none;
+}
+.cardtip{font-size:12px;color:var(--ink-quiet);letter-spacing:.04em}
+#cardwait{text-align:center;color:var(--ink-dim);font-size:14px;padding:60px 0;
+  font-family:var(--song);letter-spacing:.2em}
+
 /* ── 我想问 ───────────────────────────────────────
    反馈之前是「点进去不知道怎么操作」。补了引导之后还剩一层问题：
    知道怎么操作，不知道该看哪儿 —— 一份七十多行的报告摊在那里，

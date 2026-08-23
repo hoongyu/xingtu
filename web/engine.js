@@ -686,6 +686,91 @@ function runMorph(toSphere, done){
   }, MORPH_MS + 900);
 }
 
+/* ── 抬头日签 ────────────────────────────────────
+   跟出生星空卡同一套版式（card.js），换一套内容：
+   今天的日子、今晚这个观测地头顶上的天、以及此刻最高的那个星官。
+
+   为什么值得做：星图这一页平时是「看一张古图」，日签把它变成
+   「今晚出门抬头能看见什么」—— 后者是有人会发出去的。
+
+   时刻取当地二十一点。不是随手定的：那时天已经黑透，
+   而大多数人还没睡。 */
+async function makeDaily(){
+  const host = document.getElementById('cardhost');
+  const box = document.getElementById('cardbox');
+  box.classList.add('on');
+  host.innerHTML = '<div id="cardwait">正 在 排 今 晚 …</div>';
+  const [EPH, LUN, CARD] = await Promise.all([
+    import('./ephem.js?v=e6ac781a'),
+    import('./lunar.js?v=699142ab'),
+    import('./card.js?v=00000000'),
+  ]);
+  await CARD.ready();
+
+  const st = CFG.sites[site];
+  const now = new Date();
+  const y = now.getFullYear(), mo = now.getMonth() + 1, d = now.getDate();
+  const c = EPH.compute(y, mo, d, 21, 8, st.lat, st.lon);   // 当地二十一点
+  const L = LUN.toLunar(Date.UTC(y, mo - 1, d, 21 - 8, 0));
+
+  /* 今晚哪个星官最高。取有讲解的那些，算成员星的平均高度，
+     选最高的一个 —— 「抬头就看得见」说的就是它。 */
+  const rad = x => x * Math.PI / 180;
+  const meanAlt = g => {
+    const hs = [...new Set(g.lines.flat())];
+    let s2 = 0, n = 0;
+    for (const h of hs){
+      const f = DATA.stars[h]; if (!f) continue;
+      const H = rad(c.ramc - f[0]), dd = rad(f[1]), phi = rad(st.lat);
+      s2 += Math.asin(Math.max(-1, Math.min(1,
+        Math.sin(dd) * Math.sin(phi) + Math.cos(dd) * Math.cos(phi) * Math.cos(H))))
+        * 180 / Math.PI;
+      n++;
+    }
+    return n ? s2 / n : -99;
+  };
+  const withLore = DATA.cultures.cn.groups.filter(g => DATA.lore && DATA.lore[g.name]);
+  const top = withLore.map(g => ({ g, a: meanAlt(g) }))
+                      .sort((x, z) => z.a - x.a)[0];
+  const lore = top ? String(DATA.lore[top.g.name]).replace(/<[^>]+>/g, '') : '';
+
+  const SEVEN = ['月亮', '金星', '火星', '木星', '土星'];
+  const upNow = SEVEN.filter(n => {
+    const b = c.bodies[n];
+    const H = rad(c.ramc - b.ra), dd = rad(b.dec), phi = rad(st.lat);
+    return Math.sin(dd) * Math.sin(phi) + Math.cos(dd) * Math.cos(phi) * Math.cos(H) > 0;
+  });
+
+  const spec = {
+    square: true,
+    title: '抬 头 日 签',
+    side: '今 晚 二 十 一 时',
+    big: `${CARD.cnDigits(y)}年${CARD.cnSmall(mo)}月${CARD.cnSmall(d)}日`,
+    sub: [
+      L ? `农历 ${L.leap ? '闰' : ''}${CARD.CN_M[L.month]}月${CARD.CN_D[L.day]}` : '',
+      `${st.n}　${st.lat >= 0 ? '北纬' : '南纬'}${Math.abs(st.lat).toFixed(2)}°`,
+    ].filter(Boolean),
+    quote: top
+      ? `今晚抬头，${top.g.name}正在你头顶 ${top.a.toFixed(0)} 度高处。`
+        + (lore ? lore.slice(0, 46) : '')
+      : '',
+    fine: [
+      upNow.length ? `此刻在地平线以上：${upNow.join('、')}`
+                   : '此刻五星与月都在地平线以下',
+      `当地恒星时 ${(c.ramc / 15).toFixed(2)}h　儒略日 ${c.jd.toFixed(4)}`,
+    ],
+    stance: '位置是算的，说法是传统的',
+    sky: { lst: c.ramc, lat: st.lat, stars: DATA.stars,
+           groups: DATA.cultures.cn.groups.slice(0, 120).map(g => g.lines),
+           bodies: SEVEN.map(n => [n, c.bodies[n]]) },
+  };
+
+  const cv = document.createElement('canvas');
+  CARD.draw(cv, spec, 2);
+  CARD.present(cv,
+    `日签_${y}${String(mo).padStart(2,'0')}${String(d).padStart(2,'0')}.png`, host);
+}
+
 /** 平面／天球切换。只有星图有，概念图那份配置里没有 VIEW。 */
 function bindView(){
   if (!CFG.VIEW) return;
@@ -1109,6 +1194,24 @@ sel_site.addEventListener('change', () => {
 
 bindSpin();
 bindView();
+
+/* 日签的入口。只有星图有 —— 概念图没有观测地，也没有「今晚」。 */
+if (CFG.sites){
+  const b = document.createElement('div');
+  b.id = 'dailybtn'; b.textContent = '抬 头 日 签';
+  document.body.appendChild(b);
+  b.addEventListener('click', () => makeDaily());
+  const box = document.createElement('div');
+  box.id = 'cardbox';
+  box.innerHTML = '<div class="cbin"><div id="cardclose">关</div>'
+                + '<h3>抬 头 日 签</h3><div id="cardhost"></div></div>';
+  document.body.appendChild(box);
+  document.getElementById('cardclose')
+    .addEventListener('click', () => box.classList.remove('on'));
+  box.addEventListener('click', e => {
+    if (e.target === box) box.classList.remove('on');
+  });
+}
 
 addEventListener('resize', () => {
   if (!sel) build();

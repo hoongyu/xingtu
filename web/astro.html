@@ -9,8 +9,8 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
-<link rel="stylesheet" href="engine.css?v=ec0f98d6">
-<link rel="stylesheet" href="astro.css?v=16ba499e">
+<link rel="stylesheet" href="engine.css?v=375f1621">
+<link rel="stylesheet" href="astro.css?v=c812f10d">
 
 <canvas id="dust"></canvas>
 <div id="wheel">
@@ -65,6 +65,12 @@
 <div id="railtoggle">资 料</div>
 
 <div id="back">← 收 起</div>
+<div id="cardbox"><div class="cbin">
+  <div id="cardclose">关</div>
+  <h3>出 生 星 空 卡</h3>
+  <div id="cardhost"></div>
+</div></div>
+
 <div id="src"><div class="box"><div id="srcclose">关</div>
 <h3>来 源 与 授 权</h3>
 <div id="srcbody">
@@ -117,6 +123,7 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
   <div id="tabread"></div>
   <div id="tabdata"></div>
   <div id="skipall">全 部 展 开</div>
+  <div id="cardbtn">生 成 星 空 卡</div>
 </aside>
 <div id="readtoggle">解 析</div>
 
@@ -127,6 +134,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=0c822171';
+import { mount } from './astro.js?v=5249cd14';
 mount();
 </script>
