@@ -9,7 +9,7 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星图 · 中国星官</title>
-<link rel="stylesheet" href="engine.css?v=93ef0316">
+<link rel="stylesheet" href="engine.css?v=c5766704">
 <div id="bar">
   <div id="title">星 图</div>
   <!-- 概念星图暂时从导航里撤下（页面与数据都还在，web/concept.html）。
@@ -24,7 +24,7 @@
   </div>
 </div>
 
-<aside id="rail">
+<aside id="rail" class="scrollend">
   <input id="q" type="search" placeholder="搜星官、星座、星名…" autocomplete="off" spellcheck="false">
   <div id="hits"></div>
   <div id="secs"></div>
@@ -36,7 +36,7 @@
 <svg id="sky"></svg>
 <div id="tip"></div>
 <div id="card"></div>
-<div id="hint">点 一 颗 星 官</div>
+<div id="hint">扫 过 就 亮 · 点 开 放 大</div>
 
 <div id="panel">
   <div id="close">关</div>
@@ -46,7 +46,7 @@
 </div>
 
 <script type="module">
-import { mount } from './engine.js?v=ac13c30f';
-import { CFG } from './sky.config.js?v=893c7a85';
+import { mount } from './engine.js?v=65e81b0f';
+import { CFG } from './sky.config.js?v=734645ff';
 mount(CFG);
 </script>

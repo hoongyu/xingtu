@@ -35,7 +35,7 @@
    霞鹜文楷，SIL OFL，已裁到只剩本站用到的字。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=aa330a6d') format('woff2');
+  src:url('./wenkai-subset.woff2?v=c52773fa') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -112,6 +112,14 @@ body.zform-off #zform{transform:translateX(-100%)}
 .zcalday.on{background:var(--zhu);color:var(--zhi)}
 #zdstamp{text-align:center;font-size:14px;color:var(--zhu);padding:6px 0 2px;
   border-top:1px solid var(--jie);margin-top:6px}
+
+/* 生辰旁边那个「忘 掉」。存着才出现 —— 没存过就不该有这个字，
+   它一出现就等于在说「这儿记了东西」。样式跟星盘那页对齐，
+   两页共用 birth.js 的同一份记忆。 */
+.forget{background:none;border:1px solid var(--zhu-dim);color:var(--zhu);
+  font-family:var(--song);font-size:11px;letter-spacing:.2em;
+  padding:3px 9px 3px 12px;margin-left:10px;cursor:pointer;vertical-align:middle}
+.forget:hover{background:rgba(168,50,30,.12)}
 
 /* ── 纸上的陈设 ───────────────────────────────────
    窗棂、竹枝、香炉。三样都压到「余光才看得见」的程度：

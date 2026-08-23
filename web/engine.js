@@ -39,7 +39,10 @@ function build(){
   if (!DATA) return;                       // 数据没到就点切换按钮，会炸在 DATA.cultures
   svg.innerHTML = '';
   const W = innerWidth, H = innerHeight;
-  setVB(`${-R*2.05} ${-R*2.05} ${R*4.1} ${R*4.1}`);
+  /* 缩进着的时候重建（转球松手会走到这儿）不能把视野打回全天 ——
+     那样一松手就跳出去了。留住当前 viewBox。 */
+  const keep = sel && svg.getAttribute('viewBox');
+  setVB(keep || fullVB());
   svg.setAttribute('preserveAspectRatio','xMidYMid meet');
 
   const gGui = document.createElementNS(NS,'g');
@@ -594,7 +597,12 @@ function bindSpin(){
   if (!CFG.rotatable) return;
   let drag = null, last = 0;
   const down = e => {
-    if (!CFG.rotatable() || sel) return;      // 缩进某个星官时不转
+    /* 缩进着也能转 —— 这是天球该有的样子。
+       上一版缩进之后拖动只是平移 viewBox，而球是有边的：
+       拖到球缘就到头了，背面永远够不着。反馈说的
+       「天球没法在放大的时候拖着旋转」就是这个。
+       平面那张仍归 bindPan 平移：它没有背面，平移才对。 */
+    if (!CFG.rotatable()) return;
     drag = { x: e.clientX, y: e.clientY, lon: CFG.VIEW.lon, lat: CFG.VIEW.lat };
     spinPts = [...CUL.groups].flatMap(g => [...g._members]);
     // 加上不属于任何星官的散星，不然转起来天是空的
@@ -644,6 +652,8 @@ function bindSpin(){
        12 ms 一次，约合八十帧，足够跟手。
        小地球跟着一起重画 —— 这正是「转的时候看得见对应的地标」。
        它两百来个元素，这个频率下不贵。 */
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4)
+      panMoved = true;                         // 松手那下的 click 要吞掉
     const now = performance.now();
     if (now - last < 12) return;
     last = now;
@@ -655,6 +665,13 @@ function bindSpin(){
     drag = null; spinning = false;
     document.body.classList.remove('spinning');
     build();                                   // 一次性重建，约 40–50 ms
+    /* 缩进着转完，屏幕正中是谁就换成谁 —— 跟平面那边拖动的规矩一样。
+       转到空处就维持原来那个，不然一拖就掉出去。 */
+    if (sel){
+      const g = centerGroup() || sel;
+      open(g, NODEOF, 0, true);
+    }
+    setTimeout(() => { panMoved = false; }, 0);
   };
   svg.addEventListener('pointerdown', down);
   addEventListener('pointermove', move, { passive: false });
@@ -866,6 +883,8 @@ function bindPan(){
   let drag = null, last = 0;
   const down = e => {
     if (!sel) return;                    // 只在缩进状态下平移；全天图归转球管
+    // 天球缩进之后归转球管：球有背面，平移到球缘就到头了
+    if (CFG.rotatable && CFG.rotatable()) return;
     const vb = svg.getAttribute('viewBox').split(/\s+/).map(Number);
     drag = { x: e.clientX, y: e.clientY, vb };
     panning = true; panMoved = false;
@@ -903,6 +922,40 @@ function bindPan(){
   addEventListener('pointerup', up);
   addEventListener('pointercancel', up);
 }
+
+/* ── 滚动到头看得出来 ────────────────────────────
+   侧栏实测 scrollHeight 1025、clientHeight 900 —— 底下还压着 125 像素
+   的内容，而屏幕上没有任何迹象。反馈说「要让人感觉滚动是有尽头的」。
+
+   做法是两端各一道渐隐：**还有内容的那一头才画**，滚到头它就退掉。
+   这比一条常驻的滚动条说得更准 —— 它说的不是「这里能滚」，
+   而是「这个方向还有」。纯 CSS 做不到「还有没有」，所以这一小段 JS。 */
+const edgeUpd = [];
+function scrollEdges(root = document){
+  for (const el of root.querySelectorAll('.scrollend')){
+    if (el.dataset.edged) continue;                 // 只装一次
+    el.dataset.edged = '1';
+    const upd = () => {
+      const more = el.scrollHeight - el.clientHeight - el.scrollTop;
+      el.classList.toggle('more-up', el.scrollTop > 4);
+      el.classList.toggle('more-down', more > 4);
+    };
+    edgeUpd.push(upd);
+    el.addEventListener('scroll', upd, { passive: true });
+    addEventListener('resize', upd);
+    /* 内容是后填的（星官清单要等数据到）。
+       ResizeObserver 只盯**容器**没用：容器是定高的，内容长高它不触发。
+       第一版就是这么写的，装上去一直没亮。盯里面那层。 */
+    if (window.ResizeObserver){
+      const ro = new ResizeObserver(upd);
+      ro.observe(el);
+      for (const c of el.children) ro.observe(c);
+    }
+    upd();
+  }
+}
+/** 内容换过之后叫一声。星官清单会随中西切换整片重排。 */
+function refreshEdges(){ for (const f of edgeUpd) f(); }
 
 /** 平面／天球切换。只有星图有，概念图那份配置里没有 VIEW。 */
 function bindView(){
@@ -948,25 +1001,29 @@ function bindView(){
 // 点击只注册一次。它原来写在 build() 里面，于是每切一次中西就多挂一个
 // 监听器，而旧的那个闭包还抓着旧 culture —— 先注册的先跑，后面的撞上
 // `if (sel) return` 直接退出。症状：切到西方，点猎户座，弹出「参宿」。
-function pick(e){
-  const pt = svgPoint(e);
-  // 阈值必须换算成屏幕像素：放大之后 40 个 SVG 单位会占掉半个屏，
-  // 那样点哪儿都命中；缩小时又小得点不着。
+/** 离这一点最近的那一组，limPx 是**屏幕像素**的容差。
+ *  阈值必须换算：放大之后 40 个 SVG 单位会占掉半个屏，
+ *  那样点哪儿都命中；缩小时又小得点不着。 */
+function pickAt(pt, limPx){
+  if (!CUL) return null;
   const vbw = +svg.getAttribute('viewBox').split(/\s+/)[2];
-  // 手指的落点比鼠标散，容差放宽。这么做是安全的：下面永远取最近的那一组，
-  // lim 只决定「这一下收不收」，放宽不会让它更容易点错组，只会少漏几下。
-  const lim = (matchMedia('(hover: none)').matches ? 36 : 26)
-              * vbw / svg.getBoundingClientRect().width;
+  const lim = limPx * vbw / Math.max(1, svg.getBoundingClientRect().width);
   let best = null, bd = 1e9;
   for (const g of CUL.groups){
+    if (g._paths && !g._paths.length) continue;     // 转到背面去了，别选它
     for (const h of g._members){
-      const [x,y] = project(...DATA.stars[h].slice(0,2));
-      const d = Math.hypot(x-pt.x, y-pt.y);
+      const [x, y] = project(...DATA.stars[h].slice(0, 2));
+      const d = Math.hypot(x - pt.x, y - pt.y);
       if (d < bd){ bd = d; best = g; }
     }
   }
   return bd < lim ? best : null;
 }
+
+// 手指的落点比鼠标散，点击容差放宽。安全：上面永远取最近的那一组，
+// 容差只决定「这一下收不收」，放宽不会让它更容易点错组，只会少漏几下。
+const CLICK_LIM = () => matchMedia('(hover: none)').matches ? 36 : 26;
+function pick(e){ return pickAt(svgPoint(e), CLICK_LIM()); }
 
 svg.addEventListener('click', e => {
   if (!CUL) return;
@@ -1071,6 +1128,31 @@ function ensureFig(g){
   return fig;
 }
 
+/* ── 扫过就亮 ─────────────────────────────────────
+   原来只有一条命中带：每组连线合成一条透明粗线（.linkhit，笔宽 11）。
+   全天图上 viewBox 1558 铺在 800 像素上，11 个单位折成屏幕上 5.6 像素 ——
+   离连线两三个像素之外就没反应了，反馈说的「识别区域有点小」就是这个。
+   加宽命中带治不了根：星官之间本来就有大片空处，加宽只会让相邻两组抢。
+
+   改成跟点击同一套判法：**离哪一组最近就亮哪一组**，容差给得比点击宽。
+   这样星官周围一整片都有反应，而且不会抢 —— 最近的只有一个。
+   全扫一遍是 1550 颗星的距离比较，实测在一次 mousemove 的预算里绰绰有余。 */
+const HOVER_LIM = 64;              // 屏幕像素。点击那条是 26
+function bindHover(){
+  if (matchMedia('(hover: none)').matches) return;   // 触摸设备没有悬停
+  let last = 0;
+  svg.addEventListener('mousemove', e => {
+    if (sel || spinning || panning) return;
+    const now = performance.now();
+    if (now - last < 24) return;                     // 一帧一次够了
+    last = now;
+    const g = pickAt(svgPoint(e), HOVER_LIM);
+    if (g){ hoverGroup(g, e); hoverMove(e); }
+    else if (hoverG) unhoverGroup();
+  });
+  svg.addEventListener('mouseleave', () => { if (hoverG) unhoverGroup(); });
+}
+
 let hoverG = null;
 function hoverGroup(g, e){
   if (sel) return;                                  // 点开之后不再抢注意力
@@ -1082,6 +1164,8 @@ function hoverGroup(g, e){
   ensureFig(g)?.classList.add('on');
   showCard(g, e);
 }
+/** 已经亮着的时候，卡片跟着鼠标走 —— 扫过就亮之后这一步归 bindHover 管。 */
+function hoverMove(e){ if (hoverG) moveCard(e); }
 function unhoverGroup(){
   if (!hoverG) return;
   hoverG._paths.forEach(q => q.classList.remove('lit'));
@@ -1194,7 +1278,7 @@ function close(){
   document.querySelectorAll('.link').forEach(p => p.classList.remove('other'));
   document.querySelectorAll('.star').forEach(n => n.classList.remove('member','dimmed'));
   document.querySelectorAll('.fig').forEach(f => f.classList.remove('on'));
-  frameOn(0, 0, R * 4.1 * 1.06, 780, 0);   // 稍微放宽，让检索栏不吃掉外规
+  frameOn(0, 0, R * 4.1 * 1.06, 780);   // 稍微放宽，让检索栏不吃掉外规
   markChips();
 }
 
@@ -1203,12 +1287,53 @@ function close(){
  *  换算按 preserveAspectRatio="xMidYMid meet" 的实际投影公式来，不是估的：
  *      screen_x = (x - vx) * scale + (W - size*scale) / 2
  */
-function frameOn(cx, cy, size, ms, bottomGap = 150){
+/* ── 画面上真正空着的那一块 ────────────────────────
+   svg 铺满整个窗口，preserveAspectRatio 又是 xMidYMid ——
+   于是天球永远按**窗口**居中。可窗口左边压着 212 宽的侧栏、
+   上面压着顶栏、下面压着那行提示，实际空着的不是整个窗口。
+
+   1440×900 下实测：天球圆心落在 x=720，而侧栏右缘之后的可用区中心
+   是 826 —— 偏左 106 像素，左边离侧栏只剩 100，右边空着 312。
+   反馈说的「电脑上打开要考虑居中」就是这个。
+
+   这里量出真正空着的那块，全天图和缩进都按它摆。
+   量的是实际 DOM，不是写死的 212 —— 侧栏收起、换断点，跟着就对。 */
+function freeBox(){
   const W = innerWidth, H = innerHeight;
-  const railW = document.body.classList.contains('rail-off') ? 0 : 212;
+  /* 「这东西在不在」不能用 offsetParent 判 ——
+     position:fixed 的元素 offsetParent 恒为 null，而这三样全是 fixed。
+     第一版就是这么写的：三个都算成 0，可用区又变回整个窗口，白改。
+     用它有没有实际盒子来判。 */
+  const px = (sel, f) => { const e = document.getElementById(sel);
+    if (!e || !e.getClientRects().length) return 0;
+    const r = e.getBoundingClientRect();
+    return (r.width < 1 || r.height < 1) ? 0 : f(r);
+  };
+  const left = document.body.classList.contains('rail-off') ? 0
+             : px('rail', r => Math.max(0, r.right));
+  const top = px('bar', r => Math.max(0, r.bottom));
+  const bot = px('hint', r => Math.max(0, H - r.top));
+  return { x: left, y: top,
+           w: Math.max(1, W - left), h: Math.max(1, H - top - bot) };
+}
+
+/** 全天图的 viewBox：仍是那个 R*4.1 的方框，只是挪到可用区的正中。 */
+function fullVB(){
+  const size = R * 4.1;
+  const W = innerWidth, H = innerHeight;
+  if (!W || !H) return `${-R*2.05} ${-R*2.05} ${size} ${size}`;
+  const k = Math.min(W, H) / size;                 // meet 拟合，短边说了算
+  const f = freeBox();
+  const dx = (f.x + f.w / 2 - W / 2) / k;          // 屏幕像素折回 viewBox 单位
+  const dy = (f.y + f.h / 2 - H / 2) / k;
+  return `${-size / 2 - dx} ${-size / 2 - dy} ${size} ${size}`;
+}
+
+function frameOn(cx, cy, size, ms){
+  const W = innerWidth, H = innerHeight;
   const scale = Math.min(W, H) / size;
-  const tx = railW + (W - railW) / 2;
-  const ty = (H - bottomGap) / 2;
+  const f = freeBox();
+  const tx = f.x + f.w / 2, ty = f.y + f.h / 2;
   const vx = cx - (tx - (W - size * scale) / 2) / scale;
   const vy = cy - (ty - (H - size * scale) / 2) / scale;
   animateViewBox(vx, vy, size, size, ms);
@@ -1300,7 +1425,7 @@ document.querySelectorAll('#bar > .seg:not(.viewseg) button').forEach(b => {
     document.querySelectorAll('#bar > .seg:not(.viewseg) button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     culture = b.dataset.c;
-    document.getElementById('hint').textContent = CFG.text.hint(culture);
+    document.getElementById('hint').textContent = CFG.text.hint(culture, matchMedia('(hover: none)').matches);
     build();
   });
 });
@@ -1350,7 +1475,9 @@ sel_site.addEventListener('change', () => {
 
 bindSpin();
 bindPan();
+bindHover();
 bindView();
+scrollEdges();
 
 /* 日签的入口。只有星图有 —— 概念图没有观测地，也没有「今晚」。 */
 if (CFG.sites){
@@ -1423,12 +1550,70 @@ function goto(name){
     culture = e.c;
     document.querySelectorAll('#bar > .seg:not(.viewseg) button')
       .forEach(b => b.classList.toggle('on', b.dataset.c === culture));
-    document.getElementById('hint').textContent = CFG.text.hint(culture);
+    document.getElementById('hint').textContent = CFG.text.hint(culture, matchMedia('(hover: none)').matches);
     build();
   }
   const g = CUL && CUL.groups.find(x => x.name === name);
-  if (g) open(g, NODEOF, sel ? 1150 : 900);
-  markChips();
+  if (g) faceGroup(g, () => { open(g, NODEOF, sel ? 1150 : 900); markChips(); });
+  else markChips();
+}
+
+/** 这一组在天上的平均方向。取成员星单位向量的和再归一 ——
+    不能对赤经取算术平均：跨过 0 度那些会平均到对面去。 */
+function groupAim(g){
+  let x = 0, y = 0, z = 0;
+  for (const h of g._members){
+    const f = DATA.stars[h]; if (!f) continue;
+    const t = f[0] * Math.PI / 180, q = f[1] * Math.PI / 180;
+    x += Math.cos(q) * Math.cos(t); y += Math.cos(q) * Math.sin(t); z += Math.sin(q);
+  }
+  const r = Math.hypot(x, y, z) || 1;
+  return [Math.atan2(y, x) * 180 / Math.PI,
+          Math.asin(Math.max(-1, Math.min(1, z / r))) * 180 / Math.PI];
+}
+
+/* ── 先把球转过去，再放大 ──────────────────────────
+   从侧栏或检索里挑一个星官，它可能正在球的背面。上一版直接缩进：
+   viewBox 是推过去了，可那块天被球身挡着，屏幕上什么都没有。
+   反馈举的例子是天蝎 —— 它跟中国正好隔着地球。
+
+   所以先转。转到位之后那一组落在球心附近，缩进的窗口也就框在球心，
+   接着拖动继续转，天从窗口底下流过去 —— 这一串是一件事。
+   平面那张不用转：它没有背面，整张天一次摊完。 */
+function faceGroup(g, done){
+  if (!CFG.VIEW || !CFG.rotatable || !CFG.rotatable() || !CUL){ done(); return; }
+  const [tl, tb] = groupAim(g);
+  const l0 = CFG.VIEW.lon, b0 = CFG.VIEW.lat;
+  const dl = ((tl - l0) % 360 + 540) % 360 - 180;        // 走近路
+  const db = Math.max(-89, Math.min(89, tb)) - b0;
+  if (Math.abs(dl) < 0.6 && Math.abs(db) < 0.6){ done(); return; }
+
+  const land = () => {
+    CFG.VIEW.lon = l0 + dl; CFG.VIEW.lat = b0 + db;
+    spinning = false;
+    document.body.classList.remove('spinning');
+    build(); done();
+  };
+  // 隐藏标签页里 rAF 不触发，直接落位，不演
+  if (document.hidden){ land(); return; }
+
+  spinPts = [...new Set([...CUL.groups].flatMap(x => [...x._members])
+                        .concat(Object.keys(DATA.stars)))];
+  spinning = true;
+  document.body.classList.add('spinning');
+  paintSpin();
+  // 转多远就演多久，别让转半圈和转五度花一样的时间
+  const ms = Math.min(1100, 380 + Math.hypot(dl, db) * 3.2);
+  const t0 = performance.now();
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const step = now => {
+    const t = Math.min(1, (now - t0) / ms), k = ease(t);
+    CFG.VIEW.lon = l0 + dl * k;
+    CFG.VIEW.lat = b0 + db * k;
+    paintSpin(); drawEarth();
+    if (t < 1) requestAnimationFrame(step); else land();
+  };
+  requestAnimationFrame(step);
 }
 
 function markChips(){
@@ -1459,6 +1644,7 @@ function renderSecs(){
   const secs = document.getElementById('secs');
   secs.innerHTML = '';
   for (const [title, list] of CFG.rail) secs.appendChild(chipRow(title, list));
+  refreshEdges();
 }
 
 const qBox = document.getElementById('q');
@@ -1507,7 +1693,7 @@ function toggleRail(force){
   // 栏宽变了，取景基准跟着变；不重算的话展开中的星官会被压在栏底下。
   // 手机上侧栏是浮层不推正文，基准其实没变，重算一次也无害。
   if (sel) open(sel, NODEOF, 420);
-  else if (DATA) frameOn(0, 0, R * 4.1 * 1.06, 420, 0);
+  else if (DATA) frameOn(0, 0, R * 4.1 * 1.06, 420);
 }
 document.getElementById('railtoggle').addEventListener('click', () => toggleRail());
 
@@ -1580,7 +1766,7 @@ fetch(CFG.data, {cache:'no-cache'}).then(r => r.json()).then(d => {
   document.getElementById('q').placeholder = CFG.text.placeholder;
   document.getElementById('back').textContent = CFG.text.back;
   document.getElementById('srcbody').innerHTML = CFG.credits;
-  document.getElementById('hint').textContent = CFG.text.hint(culture);
+  document.getElementById('hint').textContent = CFG.text.hint(culture, matchMedia('(hover: none)').matches);
   const seg = document.querySelector('#bar > .seg:not(.viewseg)');
   seg.innerHTML = CFG.cultures.map(([k, label], i) =>
     `<button data-c="${k}"${i === 0 ? ' class="on"' : ''}>${label}</button>`).join('');

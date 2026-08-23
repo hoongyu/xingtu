@@ -10,6 +10,7 @@
    这种「先有格、后有星」的次序本身就是排盘的次序，手写 setTimeout
    能做但会很难读，交给时间轴干净得多。 */
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
+import * as BIRTH from './birth.js?v=af8e9281';
 import { cast, ZHI, GAN } from './ziwei.js?v=14e7fb9d';
 import { PALACE_WHY, STAR_WHY, AUX_WHY, HUA_WHY, JU_WHY, STANCE,
          STAR_MIRROR, EMPTY_MIRROR, PALACE_SHORT } from './ziwei.text.js?v=8cb9b134';
@@ -26,8 +27,11 @@ const CN_M = ['', '正','二','三','四','五','六','七','八','九','十','�
 const CELL = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
 
 let chart = null;
-let pick = { y: 2000, m: 1, d: 1 };
-let calY = 2000, calM = 1;
+/* 生辰跟星盘那页共用一份，存在本机。在两页之间来回切、
+   或者点一圈再回来，填过的都还在。见 birth.js。 */
+const SAVED = BIRTH.load();
+let pick = SAVED ? { y: SAVED.y, m: SAVED.m, d: SAVED.d } : { y: 2000, m: 1, d: 1 };
+let calY = pick.y, calM = pick.m;
 
 /* ── 小历 ───────────────────────────────────────── */
 function calendar(){
@@ -67,6 +71,7 @@ function calendar(){
   }
   box.appendChild(grid);
   $('zdstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
+  BIRTH.forgetBtn($('zdstamp'));
 }
 
 /* ── 起盘与画盘 ─────────────────────────────────── */
@@ -75,6 +80,9 @@ function run(){
   const male = document.querySelector('input[name=zsex]:checked').value === 'm';
   const c = cast(pick.y, pick.m, pick.d, hh, mi, male);
   if (!c){ $('zlunar').textContent = '此日期超出可算范围。'; return; }
+  // 记在本机。只写这一页懂的那几项，星盘填的出生地不动。
+  BIRTH.save({ y: pick.y, m: pick.m, d: pick.d, hh, mi, male });
+  BIRTH.forgetBtn($('zdstamp'));
   chart = c;
 
   $('zstamp').textContent =
@@ -412,6 +420,16 @@ function read(palace){
 
 /* ── 装配 ───────────────────────────────────────── */
 export function mount(){
+  // 上次填过就用上次那个。乾坤也记，它跟生辰一样是排盘的输入。
+  if (SAVED){
+    if (SAVED.hh != null) $('zh').value = SAVED.hh;
+    if (SAVED.mi != null) $('zmin').value = SAVED.mi;
+    if (SAVED.male != null){
+      const r = document.querySelector(
+        `input[name=zsex][value=${SAVED.male ? 'm' : 'f'}]`);
+      if (r) r.checked = true;
+    }
+  }
   calendar();
   $('zsrcbody').innerHTML =
     `<h4>${STANCE.head}</h4><p>${STANCE.body.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>`

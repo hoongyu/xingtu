@@ -15,6 +15,7 @@ import { PLACES, label as placeLabel } from './places.js?v=186d15d4';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import * as CARD from './card.js?v=bcea69a1';
 import { toLunar } from './lunar.js?v=699142ab';
+import * as BIRTH from './birth.js?v=af8e9281';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
@@ -45,8 +46,12 @@ const ASK = [
   ['when',  '什 么 时 候 会 有 变 动',
             '几个能算出年份的关口 —— 年份是算的，说法是传统的。'],
 ];
-let pick = { y: 2000, m: 1, d: 1 };            // 默认停在 2000-01-01
-let calY = 2000, calM = 1;
+/* 生辰从本机取回来。星盘和紫微共用这一份 ——
+   在两页之间来回切、或者在盘上点一圈再回来，填过的都还在。
+   取不到就仍是 2000-01-01。存在哪、怎么清，见 birth.js。 */
+const SAVED = BIRTH.load();
+let pick = SAVED ? { y: SAVED.y, m: SAVED.m, d: SAVED.d } : { y: 2000, m: 1, d: 1 };
+let calY = pick.y, calM = pick.m;
 let revealToken = 0;
 const narrow = matchMedia('(max-width: 820px)');
 
@@ -121,6 +126,7 @@ function calendar(){
   }
   box.appendChild(grid);
   $('dstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
+  BIRTH.forgetBtn($('dstamp'));
 }
 
 /* ── 排盘 ───────────────────────────────────── */
@@ -141,6 +147,9 @@ function cast(){
     && JSON.stringify(c.cusp) === JSON.stringify(houses('porphyry', c.asc, c.mc, lat, c.eps));
   c.y = pick.y; c.mo = pick.m; c.d = pick.d; c.hh = hh; c.mi = mm;
   c.tz = tz + dst;                 // 卡片要拨那一天的别的时刻，得知道时区
+  // 记在本机。只写这一页懂的那几项，紫微填的乾坤不动。
+  BIRTH.save({ y: pick.y, m: pick.m, d: pick.d, hh, mi: mm, city: ci, dst: !!dst });
+  BIRTH.forgetBtn($('dstamp'));       // 刚存下，那个按钮该出现了
   const names = DATA.planets.map(p => p.n)
     .filter(n => n !== '上升' && n !== '天顶' && n !== '南交点');
   c.asp = aspects(c.bodies, DATA.aspects, names)
@@ -1748,8 +1757,14 @@ export function mount(){
     o.textContent = placeLabel(pl);   // 参照点写进选项，用的是哪个点得让人看见
     sel.appendChild(o);
   });
-  sel.value = PLACES.length - 1;                     // 默认德国
-  $('bh').value = 12; $('bmin').value = 0;
+  /* 默认出生地原来是列表最后一项 —— 德国。这一页面向的是中文读者，
+     而且经度直接决定上升点（差 15 度就差一个小时赤经，能挪将近一个星座），
+     一个默认在柏林的盘，不改就按下「排 盘」的人拿到的是错的。改成北京。
+     上次填过就用上次那个：生辰记在本机，两页共用，见 birth.js。 */
+  sel.value = SAVED && SAVED.city != null && PLACES[SAVED.city] ? SAVED.city : 0;
+  $('bh').value = SAVED && SAVED.hh != null ? SAVED.hh : 12;
+  $('bmin').value = SAVED && SAVED.mi != null ? SAVED.mi : 0;
+  if (SAVED && SAVED.dst) $('bdst').checked = true;
   calendar();
 
   const box = $('secs');
