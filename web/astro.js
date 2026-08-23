@@ -548,10 +548,10 @@ function drawFenye(){
     g.appendChild(el('circle', { cx: q.x, cy: q.y, r: 16, fill: 'transparent' }));
     g.appendChild(el('circle', { cx: q.x, cy: q.y, r: 4 }, 'zdot'));
     const t = el('text', { x: q.x, y: q.y - 10 }, 'zname');
-    t.textContent = z.n; g.appendChild(t);
+    t.textContent = '古' + z.n; g.appendChild(t);
     g.addEventListener('mousemove', e => {
       const xs = M.filter(m => m.zhou === z.n).map(m => m.n);
-      card(e, z.n, `代表地 ${z.city}　自洛阳 ${z.bear.toFixed(0)}° 方位`,
+      card(e, '古' + z.n, `汉代州名　代表地 ${z.city}　自洛阳 ${z.bear.toFixed(0)}° 方位`,
         `配到这一州的是：${xs.join('、')}宿。`,
         '古州是一片地不是一个点。这里取一个代表地的今坐标，'
         + '只用来定它在图上朝哪个方向。');

@@ -12,3 +12,5 @@ node_modules/
 # 小地球的海岸线源数据，54KB TopoJSON，不进仓库。
 # 取自 https://www.jsdelivr.com/package/npm/world-atlas （封装 Natural Earth，公有领域）
 .geosrc/
+
+# DataV 的中国边界源数据，也不进仓库

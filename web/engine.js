@@ -103,7 +103,10 @@ function build(){
 
      必须说明白：地球一天转一圈，「哪块天压在哪块地上」时时刻刻在变。
      这一层不是天象，是一次对照 —— 固定在「选中那座城正当头」的那一瞬。 */
-  if (GEO && CFG.skyOf && CFG.VIEW && CFG.VIEW.mode === 'sphere'){
+  /* 只在「中国星官」这一套下画。分野是中国星占自己的东西 ——
+     摆在西方星座那一套上头，是把两套不相干的系统叠在一起。
+     平面与天球两张都画：分野讲的是天地对应，跟用哪种摆法无关。 */
+  if (GEO && CFG.skyOf && CFG.VIEW && culture === 'cn'){
     const pr = (la, lo) => {
       const [ra, dec] = CFG.skyOf(la, lo, site);
       return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
@@ -126,7 +129,9 @@ function build(){
       gEarthSky.appendChild(c);
       const t = document.createElementNS(NS,'text');
       t.setAttribute('x', q[0].toFixed(1)); t.setAttribute('y', (q[1] - 8).toFixed(1));
-      t.setAttribute('class','skzname'); t.textContent = z.n;
+      // 加个「古」字。这些是汉代的州，不是今天的地名 ——
+      // 不加的话「幽州」「益州」很容易被当成现在还在的地方。
+      t.setAttribute('class','skzname'); t.textContent = '古' + z.n;
       gEarthSky.appendChild(t);
     }
     // 插在参考圈之后、连线之前 —— 地在下，天在上
@@ -410,13 +415,13 @@ function drawEarth(){
   /* 十二州。转球的时候要能看见地标 —— 光有点没有名字，
      转过去也不知道转到哪儿了。这十二个是分野配到地上的那十二州，
      跟星盘页那张分野图是同一份数据（places.js 里的 ZHOU）。 */
-  if (E.zhou) for (const z of E.zhou){
+  if (E.zhou && culture === 'cn') for (const z of E.zhou){
     const q = E.toXY(z.lat, z.lon, ER);
     if (!q) continue;
     host.appendChild(mk('circle', { cx: q[0].toFixed(1), cy: q[1].toFixed(1), r: 1.8 },
                         'ezhou'));
     const t = mk('text', { x: q[0].toFixed(1), y: (q[1] - 4).toFixed(1) }, 'ezname');
-    t.textContent = z.n;
+    t.textContent = '古' + z.n;
     host.appendChild(t);
   }
 
@@ -535,7 +540,7 @@ function paintSpin(){
     ctx.beginPath(); ctx.arc(x, y, CFG.radius(f), 0, 6.2832); ctx.fill();
   }
   // 地影也要跟着画，不然一拖它就消失，而它正是要看的东西
-  if (GEO && CFG.skyOf){
+  if (GEO && CFG.skyOf && culture === 'cn'){
     const pr = (la, lo) => {
       const [ra, dec] = CFG.skyOf(la, lo, site);
       return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
@@ -550,7 +555,7 @@ function paintSpin(){
     stroke(GEO.land, 'rgba(126,166,182,.34)', 1);
     stroke(GEO.china, 'rgba(212,97,79,.62)', 1.5);
     ctx.fillStyle = 'rgba(212,97,79,.9)';
-    for (const z of (CFG.zhou || [])){
+    for (const z of (culture === 'cn' ? (CFG.zhou || []) : [])){
       const q = pr(z.lat, z.lon);
       if (!q) continue;
       ctx.beginPath(); ctx.arc(q[0], q[1], 3.5, 0, 6.2832); ctx.fill();
