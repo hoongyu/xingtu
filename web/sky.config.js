@@ -19,6 +19,17 @@ const rad = d => d * Math.PI / 180;
    球面的形状是对的，还能转。切换在右上角。 */
 export const VIEW = { mode: 'flat', lon: 0, lat: 32 };
 
+/* 换观测地时把球转到那座城的天顶。
+   天顶的赤纬**恰好等于观测地的纬度** —— 这不是近似，是定义：
+   天顶是铅垂线向上交天球的点，而铅垂线的方向就是当地纬度。
+   所以「把这座城摆到球中间」在天球上有一个精确的意思：
+   VIEW.lat = 该地纬度。摆好之后，你正对着的那半个球，
+   就是此刻在那座城头顶上的那半个天。
+
+   赤经方向不跟着动：那要看时刻，而这是一张星图不是一台天象仪，
+   没有「现在几点」。所以左右转由你自己拖。 */
+export function faceSite(lat){ VIEW.lat = Math.max(-89, Math.min(89, lat)); }
+
 /** 北极方位等距投影 —— 苏州石刻的形制。
  *  r 正比于天极距，赤经决定方位角。上北、右西（赤经自右向左递增）。*/
 function flat(ra, dec){
@@ -105,6 +116,8 @@ export const CFG = {
      那边取经度定上升，这边取纬度定外规。按纬度从北到南排，
      下拉从上往下走一遍，能看见南天那片星是怎么一点点沉下去的。 */
   tiers: BY_LAT.map(pl => [label(pl), pl[2]]),
+  // 天球要用观测地的经纬度：纬度定天顶的赤纬，经度只用来在小地球上标点。
+  sites: BY_LAT.map(pl => ({ n: label(pl), city: pl[1], lat: pl[2], lon: pl[3] })),
   pointSet: 'byCulture',      // 两套文化本来就用不同的星，取子集是对的
 
   project,
@@ -141,6 +154,34 @@ export const CFG = {
       [ring(90 - lat), 'gui', '恒显圈'],
       [ring(horizonDec(lat)), 'gui horizon', '外规'],
     ];
+    // 观测地的地平圈：天顶九十度之外那一圈，就是那座城的地平线。
+    // 它跟外规（永不升起的界）不是一回事：外规是赤纬的界，
+    // 地平圈是此刻真正的「看得见到此为止」。
+    const horiz = [];
+    {
+      const zl = rad(VIEW.lon), zb = rad(VIEW.lat);
+      // 天顶的单位向量，再取与它成 90 度的一圈
+      const zx = Math.cos(zb) * Math.cos(zl), zy = Math.cos(zb) * Math.sin(zl),
+            zz = Math.sin(zb);
+      // 找两个与天顶正交的基
+      let ax = -Math.sin(zl), ay = Math.cos(zl), az = 0;
+      const bx = zy * az - zz * ay, by = zz * ax - zx * az, bz = zx * ay - zy * ax;
+      let cur = [];
+      for (let a = 0; a <= 360; a += 2){
+        const t = rad(a), c = Math.cos(t), sn = Math.sin(t);
+        const vx = ax * c + bx * sn, vy = ay * c + by * sn, vz = az * c + bz * sn;
+        const dec = Math.asin(Math.max(-1, Math.min(1, vz))) * 180 / Math.PI;
+        const ra = (Math.atan2(vy, vx) * 180 / Math.PI + 360) % 360;
+        if (depth(ra, dec) > 0) cur.push(project(ra, dec));
+        else if (cur.length){ horiz.push(cur); cur = []; }
+      }
+      if (cur.length) horiz.push(cur);
+    }
+    const hd = horiz.filter(sg => sg.length > 1)
+      .map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
+      .join(' ');
+    if (hd) out.push([hd, 'gui zenring', '地平圈']);
+
     // 球的边缘。它不是天上的圈，是「这个球到此为止」，所以单画一道。
     const limb = [];
     for (let a = 0; a <= 360; a += 2)
@@ -155,7 +196,30 @@ export const CFG = {
      球就该是不透明的。转过去看背面。 */
   cull: (f) => VIEW.mode === 'sphere' && depth(f[0], f[1]) <= 0.015,
   rotatable: () => VIEW.mode === 'sphere',
-  VIEW,
+  /* 这几样必须挂在 CFG 上，不能只 export ——
+     引擎拿到的是 CFG 这个对象，模块的其它导出它看不见。
+     第一版只写了 export function faceSite，于是换观测地时
+     标签换了、球没转：CFG.faceSite 是 undefined，那个 if 直接跳过。 */
+  VIEW, faceSite,
+
+  /* 小地球。天球回答「你头顶上是什么」，它回答「你站在哪」——
+     两个问题挨着问才完整，而且换观测地时看得见球在转。
+
+     正交投影，中心就是选中的那座城：所以那座城永远在正中，
+     这就是「把这个城市放在地图中间」在球面上的准确做法。
+     背面的点与线一律不画，跟天球那边同一套规矩。 */
+  earth(siteIdx){
+    const st = this.sites[siteIdx];
+    const c = { lat: st.lat, lon: st.lon };
+    const toXY = (lat, lon, r) => {
+      const b = rad(lat), l = rad(lon - c.lon), b0 = rad(c.lat);
+      const cosc = Math.sin(b0) * Math.sin(b) + Math.cos(b0) * Math.cos(b) * Math.cos(l);
+      if (cosc <= 0) return null;                       // 转到地球背面去了
+      return [Math.cos(b) * Math.sin(l) * r,
+              -(Math.cos(b0) * Math.sin(b) - Math.sin(b0) * Math.cos(b) * Math.cos(l)) * r];
+    };
+    return { center: c, toXY, sites: this.sites };
+  },
 
   tipRows(hip, D, below){
     const [ra, dec, mag] = D.stars[hip];

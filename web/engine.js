@@ -93,6 +93,29 @@ function build(){
     t.textContent = label; gGui.appendChild(t);
   }
 
+  /* 天顶。球面模式下它永远在正中间 —— 因为球就是绕着它转的。
+     标出来是为了回答一个具体问题：现在正对着我的这半个球，
+     是站在哪儿看到的。 */
+  if (CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites){
+    const st = CFG.sites[site];
+    const z = document.createElementNS(NS,'g');
+    z.setAttribute('class','zenith');
+    const mk = (t, a) => { const n = document.createElementNS(NS,t);
+      for (const k in a) n.setAttribute(k, a[k]); return n; };
+    z.appendChild(mk('circle', { r: 5 }));
+    z.appendChild(mk('circle', { r: 13, class: 'zring' }));
+    z.appendChild(mk('line', { x1: -20, y1: 0, x2: -13, y2: 0 }));
+    z.appendChild(mk('line', { x1: 13, y1: 0, x2: 20, y2: 0 }));
+    z.appendChild(mk('line', { x1: 0, y1: -20, x2: 0, y2: -13 }));
+    z.appendChild(mk('line', { x1: 0, y1: 13, x2: 0, y2: 20 }));
+    const t = mk('text', { x: 0, y: -26, class: 'zlabel' });
+    t.textContent = st.n + ' · 天顶';
+    z.appendChild(t);
+    gGui.appendChild(z);
+  }
+
+  if (CFG.VIEW && CFG.VIEW.mode === 'sphere') drawEarth();
+
   const cul = DATA.cultures[culture];
   const stars = DATA.stars, names = DATA.names;
 
@@ -272,6 +295,97 @@ function build(){
   window._groups = cul.groups;              // 供自动化核对，不参与渲染
 }
 
+/* ── 小地球 ──────────────────────────────────────
+   天球回答「你头顶上是什么」，这只小球回答「你站在哪」。
+   两个问题挨着问才完整 —— 而且换观测地的时候，看得见球在转。
+
+   正交投影，中心就是选中的那座城，所以那座城永远在正中。
+   海岸线由数据给（web/coast.json，公版 Natural Earth 简化而来）；
+   没有那份数据时只画经纬网 —— 三十七个地点的点本身就把中国的形状勾出来了，
+   少了海岸线仍然认得出来，只是没那么好看。 */
+const ER = 62;                                   // 小球半径（px）
+function drawEarth(){
+  if (!CFG.earth || !CFG.sites) return;
+  let host = document.getElementById('earth');
+  if (!host){
+    host = document.createElementNS(NS, 'svg');
+    host.id = 'earth';
+    host.setAttribute('viewBox', `${-ER-16} ${-ER-16} ${(ER+16)*2} ${(ER+16)*2}`);
+    document.body.appendChild(host);
+  }
+  host.innerHTML = '';
+  const E = CFG.earth(site);
+  const mk = (t, a, cls) => { const n = document.createElementNS(NS, t);
+    for (const k in a) n.setAttribute(k, a[k]);
+    if (cls) n.setAttribute('class', cls); return n; };
+
+  host.appendChild(mk('circle', { r: ER }, 'eball'));
+
+  // 经纬网。三十度一格，背面断开
+  const grat = [];
+  for (let lon = -180; lon < 180; lon += 30){
+    let cur = [];
+    for (let lat = -90; lat <= 90; lat += 3){
+      const q = E.toXY(lat, lon, ER);
+      if (q) cur.push(q); else if (cur.length){ grat.push(cur); cur = []; }
+    }
+    if (cur.length) grat.push(cur);
+  }
+  for (let lat = -60; lat <= 60; lat += 30){
+    let cur = [];
+    for (let lon = -180; lon <= 180; lon += 3){
+      const q = E.toXY(lat, lon, ER);
+      if (q) cur.push(q); else if (cur.length){ grat.push(cur); cur = []; }
+    }
+    if (cur.length) grat.push(cur);
+  }
+  const d = grat.filter(sg => sg.length > 1)
+    .map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
+    .join(' ');
+  if (d) host.appendChild(mk('path', { d }, 'egrat'));
+
+  // 海岸线。有就画，没有就算了 —— 这一块是可选的
+  if (COAST){
+    const segs = [];
+    for (const poly of COAST){
+      let cur = [];
+      for (let i = 0; i < poly.length; i += 2){
+        const q = E.toXY(poly[i + 1], poly[i], ER);
+        if (q) cur.push(q); else if (cur.length > 1){ segs.push(cur); cur = []; }
+        else cur = [];
+      }
+      if (cur.length > 1) segs.push(cur);
+    }
+    const cd = segs.map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
+                   .join(' ');
+    if (cd) host.appendChild(mk('path', { d: cd }, 'ecoast'));
+  }
+
+  // 三十七个地点。选中的那个是朱色，别的压得很淡
+  E.sites.forEach((st, i) => {
+    const q = E.toXY(st.lat, st.lon, ER);
+    if (!q) return;
+    host.appendChild(mk('circle', { cx: q[0].toFixed(1), cy: q[1].toFixed(1),
+      r: i === site ? 3.4 : 1.5 }, i === site ? 'ehere' : 'espot'));
+  });
+  const here = E.toXY(E.center.lat, E.center.lon, ER);
+  if (here){
+    host.appendChild(mk('circle', { cx: here[0], cy: here[1], r: 9 }, 'ehalo'));
+    const t = mk('text', { x: 0, y: ER + 14 }, 'elabel');
+    t.textContent = CFG.sites[site].n;
+    host.appendChild(t);
+  }
+  host.appendChild(mk('circle', { r: ER }, 'elimb'));
+}
+
+/* 海岸线是可选数据。取不到就只画经纬网，不报错、不重试 ——
+   它是锦上添花，不该让一个网络抖动把整页拖住。 */
+let COAST = null;
+fetch('coast.json', { cache: 'no-cache' })   // 跟 astrodata.json 一个口径：不带指纹，靠协商缓存
+  .then(r => r.ok ? r.json() : null)
+  .then(j => { if (j && j.length){ COAST = j; if (CFG.VIEW && CFG.VIEW.mode === 'sphere') drawEarth(); } })
+  .catch(() => {});
+
 /* ── 转球 ────────────────────────────────────────
    为什么拖的时候画到 canvas，松手才回 SVG：量过。
    这张图有 3191 个要动的元素（1386 颗星、1386 个命中圈、419 条连线）。
@@ -383,18 +497,26 @@ function bindSpin(){
 /** 平面／天球切换。只有星图有，概念图那份配置里没有 VIEW。 */
 function bindView(){
   if (!CFG.VIEW) return;
-  const box = document.getElementById('where');
+  /* 放进 #bar 当直接子元素，不要塞进 #where ——
+     #where 里已经有「几颗永不升起」「来源」「观测地」三样，
+     再挤一个分段控件，375px 的屏上它会顶出屏外。
+     当成 bar 的子元素，flex-wrap 会自己换行。 */
   const seg = document.createElement('div');
   seg.className = 'seg viewseg';
   seg.innerHTML = '<button data-v="flat" class="on">平 面</button>'
                 + '<button data-v="sphere">天 球</button>';
-  box.insertBefore(seg, box.firstChild);
+  const bar = document.getElementById('bar');
+  const cultSeg = bar.querySelector(':scope > .seg');
+  bar.insertBefore(seg, cultSeg ? cultSeg.nextSibling : bar.lastElementChild);
   seg.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.classList.contains('on')) return;
     seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
     if (sel) close();
     CFG.VIEW.mode = b.dataset.v;
+    // 一进天球就摆到当前观测地的天顶，别让人先看到一个不知道从哪看的球
+    if (CFG.VIEW.mode === 'sphere' && CFG.faceSite && CFG.sites)
+      CFG.faceSite(CFG.sites[site].lat);
     document.body.classList.toggle('sphere', CFG.VIEW.mode === 'sphere');
     build();
   });
@@ -744,10 +866,10 @@ function bindSeg(){
    不限定的话点它会把 culture 设成 undefined，DATA.cultures[undefined].groups
    当场抛错 —— build() 死在三规之后、星点之前，屏幕上只剩三个圈。
    星盘页加「口吻」开关时踩过一模一样的坑，这是第二次。 */
-document.querySelectorAll('#bar > .seg button').forEach(b => {
+document.querySelectorAll('#bar > .seg:not(.viewseg) button').forEach(b => {
   b.addEventListener('click', () => {
     if (sel) close();
-    document.querySelectorAll('#bar > .seg button').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('#bar > .seg:not(.viewseg) button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     culture = b.dataset.c;
     document.getElementById('hint').textContent = CFG.text.hint(culture);
@@ -770,7 +892,15 @@ if (CFG.text.siteLabel){
   lb.textContent = CFG.text.siteLabel;
   sel_site.parentNode.insertBefore(lb, sel_site);
 }
-sel_site.addEventListener('change', () => { if (sel) close(); site = +sel_site.value; build(); });
+sel_site.addEventListener('change', () => {
+  if (sel) close();
+  site = +sel_site.value;
+  /* 天球模式下换观测地，把球转到那座城的天顶 ——
+     天顶的赤纬恰好等于当地纬度，所以「把这座城摆到中间」有精确的意思。 */
+  if (CFG.faceSite && CFG.VIEW && CFG.VIEW.mode === 'sphere' && CFG.sites)
+    CFG.faceSite(CFG.sites[site].lat);
+  build();
+});
 
 bindSpin();
 bindView();
@@ -826,7 +956,7 @@ function goto(name){
   if (culture !== e.c){
     if (sel) close();
     culture = e.c;
-    document.querySelectorAll('#bar > .seg button')
+    document.querySelectorAll('#bar > .seg:not(.viewseg) button')
       .forEach(b => b.classList.toggle('on', b.dataset.c === culture));
     document.getElementById('hint').textContent = CFG.text.hint(culture);
     build();
