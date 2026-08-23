@@ -513,17 +513,25 @@ function paintSpin(){
 
   const stars = DATA.stars, tierV = CFG.tiers[site][1];
   const culled = CFG.cull || (() => false);
-  // 球的边缘先画，给它一个实体感
-  ctx.beginPath(); ctx.arc(0, 0, R * 1.86, 0, 6.2832);
-  ctx.fillStyle = 'rgba(12,16,26,.55)'; ctx.fill();
-  ctx.strokeStyle = 'rgba(232,226,212,.20)'; ctx.lineWidth = 1.1 / k * k; ctx.stroke();
+  /* 球的底与边缘。摊开的过程中它要淡出 ——
+     摊平之后还顶着一个圆盘的话，那张图就还是球。 */
+  const ballA = 1 - (CFG.VIEW ? CFG.VIEW.t : 0);
+  if (ballA > 0.01){
+    ctx.globalAlpha = ballA;
+    ctx.beginPath(); ctx.arc(0, 0, R * 1.86, 0, 6.2832);
+    ctx.fillStyle = 'rgba(12,16,26,.55)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(232,226,212,.20)'; ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
   ctx.fillStyle = '#e8e2d4';
   for (const hip of spinPts){
     const f = stars[hip];
     if (culled(f)) continue;
     const [x, y] = project(f[0], f[1]);
-    ctx.globalAlpha = CFG.visible(f, tierV) ? CFG.dim(f) : .12;
+    const fa = CFG.faceAlpha ? CFG.faceAlpha(f) : 1;
+    if (fa <= 0) continue;
+    ctx.globalAlpha = (CFG.visible(f, tierV) ? CFG.dim(f) : .12) * fa;
     ctx.beginPath(); ctx.arc(x, y, CFG.radius(f), 0, 6.2832); ctx.fill();
   }
   // 地影也要跟着画，不然一拖它就消失，而它正是要看的东西
@@ -554,9 +562,11 @@ function paintSpin(){
   ctx.strokeStyle = 'rgba(217,180,95,.42)';
   ctx.lineWidth = 1.1;
   ctx.beginPath();
+  const morphing = CFG.morphing && CFG.morphing();
   for (const g of CUL.groups)
     for (const line of g.lines){
-      if (line.some(h => culled(stars[h]))) continue;
+      // 过渡中不整条剔掉：连线要跟着一起摊开，断掉就看不出是同一张图了
+      if (!morphing && line.some(h => culled(stars[h]))) continue;
       line.forEach((h, i) => {
         const [x, y] = project(...stars[h].slice(0, 2));
         i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
@@ -614,6 +624,63 @@ function bindSpin(){
   addEventListener('pointercancel', up);
 }
 
+/* ── 摊开／卷起的那一秒 ──────────────────────────
+   过渡跑在 canvas 上，跟拖球同一个理由：三千一百多个元素逐帧改属性是
+   30–40 ms 一帧，画到 canvas 是 0.4–2.5 ms。差二三十倍。
+   过渡完再重建一次 SVG（40–50 ms，一次），交互全回来。
+
+   时间轴分两段，先后顺序由几何定（见 sky.config.js 里 morph 的注释）：
+     0 → 0.42   转正：视线纬度挪到 90°，北天极对着你
+     0.42 → 1   摊开：半径从 SR·cos(赤纬) 拉成 2R·(90−赤纬)/180
+   卷起来把这两段倒过来跑。
+
+   不用 requestAnimationFrame 之外的东西，但也不指望它：
+   隐藏标签页里 rAF 不触发，那时直接落位，不演。 */
+const MORPH_MS = 1150;
+let morphing = false;
+
+function easeInOut(x){ return x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2; }
+
+function runMorph(toSphere, done){
+  const V = CFG.VIEW;
+  if (!V || morphing){ done(); return; }
+  // 后台标签页里没有动画可言，直接落位
+  if (document.hidden){ V.t = toSphere ? 0 : 1; V.mlat = null; V.t = 0; done(); return; }
+  morphing = true;
+  document.body.classList.add('spinning');       // 借它藏 SVG、亮 canvas
+  const lat0 = V.lat;
+  const t0 = performance.now();
+  const step = () => {
+    const k = Math.min(1, (performance.now() - t0) / MORPH_MS);
+    // 摊开时 0→1，卷起时 1→0
+    const p = toSphere ? 1 - k : k;
+    if (p < .42){
+      // 转正段：把视线纬度推到 90，还没开始摊
+      V.mlat = lat0 + (90 - lat0) * easeInOut(p / .42);
+      V.t = 0;
+    } else {
+      V.mlat = 90;
+      V.t = easeInOut((p - .42) / .58);
+    }
+    paintSpin();
+    if (k < 1) requestAnimationFrame(step);
+    else {
+      V.t = 0; V.mlat = null;
+      morphing = false;
+      document.body.classList.remove('spinning');
+      done();
+    }
+  };
+  requestAnimationFrame(step);
+  // rAF 万一不触发（隐藏标签页切回来之前），兜一手别把页面卡在过渡态
+  setTimeout(() => {
+    if (!morphing) return;
+    V.t = 0; V.mlat = null; morphing = false;
+    document.body.classList.remove('spinning');
+    done();
+  }, MORPH_MS + 900);
+}
+
 /** 平面／天球切换。只有星图有，概念图那份配置里没有 VIEW。 */
 function bindView(){
   if (!CFG.VIEW) return;
@@ -635,12 +702,23 @@ function bindView(){
     if (!b || b.classList.contains('on')) return;
     seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
     if (sel) close();
-    CFG.VIEW.mode = b.dataset.v;
-    // 一进天球就摆到当前观测地的天顶，别让人先看到一个不知道从哪看的球
-    if (CFG.VIEW.mode === 'sphere' && CFG.faceSite && CFG.sites)
+    const toSphere = b.dataset.v === 'sphere';
+    /* 先演，再换模式。顺序不能反：过渡是从「现在这张」变到「那张」，
+       模式提前改了，第一帧就已经是终点了。 */
+    if (toSphere && CFG.faceSite && CFG.sites)
       CFG.faceSite(CFG.sites[site].lat, site);
-    document.body.classList.toggle('sphere', CFG.VIEW.mode === 'sphere');
-    build();
+    if (CFG.VIEW.mode === (toSphere ? 'sphere' : 'flat')){
+      document.body.classList.toggle('sphere', toSphere);
+      build();
+      return;
+    }
+    // 过渡期间两头的坐标都要算得出来，所以先把模式设成球（morph 以它为基准）
+    CFG.VIEW.mode = 'sphere';
+    runMorph(toSphere, () => {
+      CFG.VIEW.mode = toSphere ? 'sphere' : 'flat';
+      document.body.classList.toggle('sphere', toSphere);
+      build();
+    });
   });
 }
 

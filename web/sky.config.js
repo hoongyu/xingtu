@@ -18,7 +18,9 @@ const rad = d => d * Math.PI / 180;
    两种都留着，不是骑墙：摊平的能一眼看全整个天区，也是文物本来的样子；
    球面的形状是对的，还能转。切换在右上角。 */
 // 默认就开天球：形状是对的那一张该先被看见，摊平的那张按需再切。
-export const VIEW = { mode: 'sphere', lon: 0, lat: 32 };
+/* t: 摊开进度，0 是球、1 是平面，只在过渡的那一秒里非零。
+   mlat: 过渡中的临时视线纬度（先转正到 90 再摊开）。 */
+export const VIEW = { mode: 'sphere', lon: 0, lat: 32, t: 0, mlat: null };
 
 /* 换观测地时把球转到那座城的天顶。
    天顶的赤纬**恰好等于观测地的纬度** —— 这不是近似，是定义：
@@ -62,6 +64,20 @@ function vec(ra, dec){
 
 /** 把向量转到「视线坐标」：先绕极轴转到中心赤经，再俯仰到中心赤纬。
  *  返回 [右, 上, 朝我] —— 第三个分量大于零就是朝着观者这一面。 */
+function toView3(v, lonDeg, latDeg){
+  const l = rad(lonDeg), b = rad(latDeg);
+  const cl = Math.cos(l), sl = Math.sin(l);
+  const x1 = v[0] * cl + v[1] * sl;
+  const y1 = -v[0] * sl + v[1] * cl;
+  const z1 = v[2];
+  const cb = Math.cos(b), sb = Math.sin(b);
+  return [y1, -x1 * sb + z1 * cb, x1 * cb + z1 * sb];
+}
+function orthoAt(ra, dec, latDeg){
+  const w = toView3(vec(ra, dec), VIEW.lon, latDeg);
+  return [-w[0] * SR, -w[1] * SR];
+}
+
 function toView(v){
   const l = rad(VIEW.lon), b = rad(VIEW.lat);
   const cl = Math.cos(l), sl = Math.sin(l);
@@ -85,7 +101,41 @@ function ortho(ra, dec){
   return [-w[0] * SR, -w[1] * SR];   // 取反保持右西上北，跟平面图一致
 }
 
+/* ── 摊开与卷起 ──────────────────────────────────
+   球与平面之间不是换一张图，是同一批星换一种摆法，所以过渡应当看得见。
+
+   做法分两步，顺序是几何决定的，不是随手编的：
+
+   一、**转正**。把球先转到北天极对着你（mlat: 当前纬度 → 90°）。
+       这一步之后，球上每颗星的方位角就等于它在平面图上的方位角 ——
+       两张图从这一刻起只差一件事：半径怎么算。
+
+   二、**摊开**。正对北极的正交投影是 r = SR·cos(赤纬)，
+       苏州石刻那张等距方位投影是 r = 2R·(90−赤纬)/180。
+       同一个方位角，两个半径，中间按 t 线性插值 ——
+       所以摊开这一下是**纯粹的径向拉伸**，星星各自沿着自己那条半径
+       往外走，不会互相穿过去。这正是「摊平」这件事本身。
+
+   卷起来就是倒过来跑：先收半径，再把球转回观测地的天顶。
+
+   为什么值得这么讲究：随手把两组屏幕坐标插值也能动，但那样南天的星
+   会横着划过去 —— 看着像洗牌，不像摊开一张图。 */
+function morph(ra, dec, t, mlat){
+  const a = rad(ra) - Math.PI / 2;
+  const w = toView3(vec(ra, dec), VIEW.lon, mlat);
+  // 球那头：正交投影后的极坐标半径（正对北极时恰好是 SR·cos(dec)）
+  const rs = Math.hypot(w[0], w[1]) * SR;
+  const rf = (90 - dec) / 180 * R * 2;
+  const r = rs * (1 - t) + rf * t;
+  /* 方位角：转正之后球上的方位角就是平面图的方位角，所以直接用平面那个。
+     没转正时（mlat 还在路上）用球上的实际方位，两头都连得上。 */
+  const ang = mlat > 89.5 ? a : Math.atan2(-w[1], -w[0]);
+  return [Math.cos(ang) * r, Math.sin(ang) * r];
+}
+
 function project(ra, dec){
+  if (VIEW.t > 0) return morph(ra, dec, VIEW.t, VIEW.mlat);
+  if (VIEW.mlat != null && VIEW.mlat !== VIEW.lat) return orthoAt(ra, dec, VIEW.mlat);
   return VIEW.mode === 'sphere' ? ortho(ra, dec) : flat(ra, dec);
 }
 
@@ -210,7 +260,18 @@ export const CFG = {
   /* 球面模式下背面的星不画。压暗也试过，读起来像重影 ——
      一颗前面的星和一颗背面的星投到同一个点上，谁也说不清哪个是哪个。
      球就该是不透明的。转过去看背面。 */
-  cull: (f) => VIEW.mode === 'sphere' && depth(f[0], f[1]) <= 0.015,
+  cull: (f) => VIEW.mode === 'sphere' && VIEW.t === 0 && VIEW.mlat == null
+               && depth(f[0], f[1]) <= 0.015,
+  /* 过渡中背面的星不剔除，改用透明度：摊开到一半时它们从边缘浮出来，
+     这一下正是「原来球背面还有这么多」的那个瞬间。 */
+  faceAlpha(f){
+    if (VIEW.t === 0 && VIEW.mlat == null) return 1;
+    const z = toView3(vec(f[0], f[1]), VIEW.lon,
+                      VIEW.mlat == null ? VIEW.lat : VIEW.mlat)[2];
+    if (z > 0.015) return 1;
+    return Math.max(0, Math.min(1, VIEW.t * 1.6));
+  },
+  morphing: () => VIEW.t > 0 || VIEW.mlat != null,
   rotatable: () => VIEW.mode === 'sphere',
   /* 这几样必须挂在 CFG 上，不能只 export ——
      引擎拿到的是 CFG 这个对象，模块的其它导出它看不见。
