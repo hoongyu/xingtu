@@ -4,7 +4,7 @@
  * 画几道参考圈、悬停显示什么、面板统计什么。引擎不认「星等」也不认
  * 「赤纬」，那些语义全在这里。
  */
-import { BY_LAT, label, ZHOU } from './places.js?v=b86c1abc';
+import { BY_LAT, label } from './places.js?v=186d15d4';
 
 const R = 380;                     // 图面半径，引擎也用它
 const rad = d => d * Math.PI / 180;
@@ -308,7 +308,6 @@ export const CFG = {
      正交投影，中心就是选中的那座城：所以那座城永远在正中，
      这就是「把这个城市放在地图中间」在球面上的准确做法。
      背面的点与线一律不画，跟天球那边同一套规矩。 */
-  zhou: ZHOU.map(z => ({ n: z[0], city: z[1], lat: z[2], lon: z[3] })),
 
   /* 把地上的一点投到天上：它正上方的那块天。
      赤纬那头是恒等的 —— 一个地方的天顶赤纬就是它的纬度。
@@ -345,7 +344,7 @@ export const CFG = {
       return [Math.cos(b) * Math.sin(l) * r,
               -(Math.cos(b0) * Math.sin(b) - Math.sin(b0) * Math.cos(b) * Math.cos(l)) * r];
     };
-    return { center: c, toXY, sites: this.sites, zhou: this.zhou,
+    return { center: c, toXY, sites: this.sites,
              site: st, drifted: Math.abs(VIEW.lon - ZENITH.ra) > 0.5
                               || Math.abs(VIEW.lat - ZENITH.dec) > 0.5 };
   },

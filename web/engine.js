@@ -103,10 +103,12 @@ function build(){
 
      必须说明白：地球一天转一圈，「哪块天压在哪块地上」时时刻刻在变。
      这一层不是天象，是一次对照 —— 固定在「选中那座城正当头」的那一瞬。 */
-  /* 只在「中国星官」这一套下画。分野是中国星占自己的东西 ——
-     摆在西方星座那一套上头，是把两套不相干的系统叠在一起。
-     平面与天球两张都画：分野讲的是天地对应，跟用哪种摆法无关。 */
-  if (GEO && CFG.skyOf && CFG.VIEW && culture === 'cn'){
+  /* 两套星官下都画。
+     上一版把整层地影锁在「中国星官」下，理由是分野属于中国星占 ——
+     那条理由只对十二州成立。十二州已经撤了，剩下的是海岸线与疆域，
+     那是地理，不是星占：**站在哪儿看天，跟你用哪套星名没有关系**。
+     反馈说「东方有当前位置坐标，西方星座就没有了」，说的正是这个。 */
+  if (GEO && CFG.skyOf && CFG.VIEW){
     const pr = (la, lo) => {
       const [ra, dec] = CFG.skyOf(la, lo, site);
       return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
@@ -120,28 +122,6 @@ function build(){
     put(segsToD(projectRings(GEO.land, pr)), 'skland');
     put(segsToD(projectRings(GEO.china, pr)), 'skchina');
     // 十二州：转到哪儿了得有名字才说得清
-    /* 十二州挤在中原那一小片，投到图上常常只占几十个像素 ——
-       名字全写出来会叠成一坨（第一版就是，截图里糊成一团）。
-       点全留，名字按距离取舍：离已放的名字太近就只留点。
-       间距按当前缩放折算成屏幕像素，不然缩放一变就又挤上了。 */
-    const sfs = parseFloat(svg.style.getPropertyValue('--sfs')) || 2.2;
-    const MINGAP = 26 * sfs;
-    const placedLbl = [];
-    for (const z of (CFG.zhou || [])){
-      const q = pr(z.lat, z.lon);
-      if (!q) continue;
-      const c = document.createElementNS(NS,'circle');
-      c.setAttribute('cx', q[0].toFixed(1)); c.setAttribute('cy', q[1].toFixed(1));
-      c.setAttribute('r', 3.5); c.setAttribute('class','skzhou');
-      gEarthSky.appendChild(c);
-      if (placedLbl.some(p2 => Math.hypot(p2[0]-q[0], p2[1]-q[1]) < MINGAP)) continue;
-      placedLbl.push(q);
-      const t = document.createElementNS(NS,'text');
-      t.setAttribute('x', q[0].toFixed(1)); t.setAttribute('y', (q[1] - 8).toFixed(1));
-      // 加个「古」字。这些是汉代的州，不是今天的地名。
-      t.setAttribute('class','skzname'); t.textContent = '古' + z.n;
-      gEarthSky.appendChild(t);
-    }
     // 插在参考圈之后、连线之前 —— 地在下，天在上
     gGui.appendChild(gEarthSky);
   }
@@ -153,7 +133,7 @@ function build(){
   /* 平面那张也标。它不按观测地居中 —— 那张图的中心永远是北天极，
      这是等距方位投影的形制。但总得让人看见「我选的地方在哪儿」，
      否则换城市屏幕上什么都不动，看着像坏了。 */
-  if (CFG.VIEW && CFG.sites && CFG.ZENITH && culture === 'cn'){
+  if (CFG.VIEW && CFG.sites && CFG.ZENITH){
     const Z = CFG.ZENITH;
     const st = CFG.sites[Z.site] || CFG.sites[site];
     if (!(CFG.cull && CFG.cull([Z.ra, Z.dec]))){
@@ -423,19 +403,6 @@ function drawEarth(){
       r: i === site ? 3.4 : 1.5 }, i === site ? 'ehere' : 'espot'));
   });
 
-  /* 十二州。转球的时候要能看见地标 —— 光有点没有名字，
-     转过去也不知道转到哪儿了。这十二个是分野配到地上的那十二州，
-     跟星盘页那张分野图是同一份数据（places.js 里的 ZHOU）。 */
-  if (E.zhou && culture === 'cn') for (const z of E.zhou){
-    const q = E.toXY(z.lat, z.lon, ER);
-    if (!q) continue;
-    host.appendChild(mk('circle', { cx: q[0].toFixed(1), cy: q[1].toFixed(1), r: 1.8 },
-                        'ezhou'));
-    const t = mk('text', { x: q[0].toFixed(1), y: (q[1] - 4).toFixed(1) }, 'ezname');
-    t.textContent = '古' + z.n;
-    host.appendChild(t);
-  }
-
   // 选中那座城的光圈。转开之后它不再在正中，所以按投影位置画
   const here = E.toXY(E.site.lat, E.site.lon, ER);
   if (here) host.appendChild(mk('circle', { cx: here[0].toFixed(1),
@@ -551,7 +518,7 @@ function paintSpin(){
     ctx.beginPath(); ctx.arc(x, y, CFG.radius(f), 0, 6.2832); ctx.fill();
   }
   // 地影也要跟着画，不然一拖它就消失，而它正是要看的东西
-  if (GEO && CFG.skyOf && culture === 'cn'){
+  if (GEO && CFG.skyOf){
     const pr = (la, lo) => {
       const [ra, dec] = CFG.skyOf(la, lo, site);
       return CFG.depth(ra, dec) > 0.015 ? CFG.project(ra, dec) : null;
@@ -565,13 +532,6 @@ function paintSpin(){
     };
     stroke(GEO.land, 'rgba(126,166,182,.34)', 1);
     stroke(GEO.china, 'rgba(212,97,79,.62)', 1.5);
-    ctx.fillStyle = 'rgba(212,97,79,.9)';
-    for (const z of (culture === 'cn' ? (CFG.zhou || []) : [])){
-      const q = pr(z.lat, z.lon);
-      if (!q) continue;
-      ctx.beginPath(); ctx.arc(q[0], q[1], 3.5, 0, 6.2832); ctx.fill();
-    }
-    ctx.fillStyle = '#e8e2d4';
   }
 
   ctx.globalAlpha = 1;

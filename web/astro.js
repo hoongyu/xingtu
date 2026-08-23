@@ -11,7 +11,7 @@
  * 出生数据只在浏览器里算，不发往任何服务器。
  */
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
-import { PLACES, label as placeLabel } from './places.js?v=b86c1abc';
+import { PLACES, label as placeLabel } from './places.js?v=186d15d4';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import * as CARD from './card.js?v=40590907';
 import { toLunar } from './lunar.js?v=699142ab';
