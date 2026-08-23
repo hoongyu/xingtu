@@ -33,7 +33,7 @@
    源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=ce5ec795') format('woff2');
+  src:url('./wenkai-subset.woff2?v=d23347b8') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -331,6 +331,21 @@ body:not(.rail-off) #railtoggle{left:212px}
   margin-left:auto;font-size:12.5px;color:var(--ink-dim);letter-spacing:.1em;
   display:flex;align-items:center;gap:10px;
 }
+/* ── 平面／天球 ───────────────────────────────────
+   拖动时盖上去的那张 canvas。它只在拖的那几百毫秒里存在感 ——
+   松手就换回 SVG，交互（点、悬停、名字）全在 SVG 那边。 */
+#spin{
+  position:fixed;inset:0;z-index:1;display:none;pointer-events:none;
+}
+body.spinning #spin{display:block}
+body.spinning #sky{visibility:hidden}
+body.sphere #sky{cursor:grab}
+body.sphere.spinning #sky{cursor:grabbing}
+/* 球的边缘：不是天上的圈，是「这个球到此为止」，所以比三规更淡 */
+.gui.limb{fill:rgba(12,16,26,.5);stroke:rgba(232,226,212,.20);stroke-width:1}
+.viewseg{margin-right:2px}
+.viewseg button{font-size:12px;padding:5px 11px;letter-spacing:.16em}
+
 .sitelab{font-family:var(--song);font-size:12px;letter-spacing:.2em;
   color:var(--ink-quiet);margin-right:-4px}
 #where select{

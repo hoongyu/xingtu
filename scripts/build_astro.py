@@ -196,7 +196,9 @@ WEST_LORE = {
 }
 
 
+import math
 from astro_reading import (SIGN_KEY, PLANET_KEY, HOUSE_KEY, XIANG, FENYE,
+                           ZHOU, LUOYANG,
                            XIU_ZHAN, ELEM_READ, MODE_READ,
                            DIGNITY, DIGNITY_READ, JIEQI, MOON_PHASE)
 from astro_life import (VENUS_SIGN, MARS_SIGN, MC_SIGN, HOUSE_SOURCE,
@@ -318,6 +320,17 @@ def build():
         'aspects': [{'n': n, 'a': a, 'orb': o, 'k': k, 't': t, 'p': p}
                     for n, a, o, k, t, p in ASPECTS],
         'ci': [{'n': n, 'fen': f, 'xiu': x} for n, f, x in CI],
+        # 分野图用：每个州在地上朝哪个方向（自洛阳量起，正北为零、顺时针）
+        # 与它离洛阳多远。古州是一片地不是一个点，这两个数只用来定图上的
+        # 方位与远近，页面上写明了这一点。
+        'zhou': [{'n': n, 'city': c, 'lat': la, 'lon': lo,
+                  'bear': round((math.degrees(math.atan2(
+                      (lo - LUOYANG[1]) * math.cos(math.radians(LUOYANG[0])),
+                      la - LUOYANG[0])) + 360) % 360, 2),
+                  'dist': round(math.hypot(
+                      (lo - LUOYANG[1]) * math.cos(math.radians(LUOYANG[0])),
+                      la - LUOYANG[0]), 2)}
+                 for n, c, la, lo in ZHOU],
         'mansions': mansions(),
         'lore': {**CN_LORE, **WEST_LORE},
     }

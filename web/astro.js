@@ -23,6 +23,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 // plain 默认为真 —— 这一页先要说得懂，术语版是给想看原措辞的人留的选项。
 let DATA, chart = null, mode = 'west', plain = true, hsys = 'placidus';   // 跟通行排盘器一致，已逐条验过
 let topic = 'all';                             // 「我想问」选的是哪一节
+let cnView = 'xiu';                            // 中式盘：宿盘 还是 分野图
 
 /* 报告有七十多行，没人从头读到尾 —— 人心里通常只有一两个问题。
    先问他问什么，再只给那一节。措辞按「他自己会怎么问」来写，
@@ -292,6 +293,7 @@ function cast(){
 
 /* ── 画盘 ───────────────────────────────────── */
 function draw(){
+  if (mode === 'east' && cnView === 'fenye'){ drawFenye(); return; }
   /* 三张 svg 叠在一起，viewBox 完全相同，所以坐标一套通用；
      差别只在各自的 translateZ。一层画相位、一层画宫圈、一层画行星，
      倾斜时它们会真的错开。原来是一张 svg 四个 g，改动只在这几行。 */
@@ -452,6 +454,125 @@ function draw(){
     const [mx, my] = pos(0, outer + 22);
     const t = el('text', { x: mx, y: my + 5 }, 'mark');
     t.textContent = '角宿'; gRing.appendChild(t);
+  }
+}
+
+/* ── 分野图 ──────────────────────────────────────
+   这一张是这个项目里最该用「弧线连两头」这个画法的地方，
+   因为分野本来就是一套天地对应：《汉书·地理志》一路把二十八宿逐宿配到
+   地上的国与州 —— 角亢氐配郑·兖州，尾箕配燕·幽州，井鬼配秦·雍州。
+   天上某处有变，应在地上某地。这是中国星占最政治的一面，
+   在宿盘上只能挤成一行小字，摊成一张图才看得出它是一套系统。
+
+   画法：外圈是天，二十八宿按赤经排、宿度不等（宽窄本身是内容）；
+   内圈是地，十二州按自洛阳量起的真实方位摆 —— 洛阳是汉魏的天下之中，
+   这套说法也以它为原点。中间的弧连起对应关系。
+   你的七政落在哪几宿，那几条弧就亮起来。
+
+   两圈的角度口径不同，必须写明：外圈是赤经（跟宿盘一致，角宿在左），
+   内圈是罗盘方位（上北下南）。古人画分野图也是这么分开画的。 */
+function drawFenye(){
+  const vb = `${-R*1.18} ${-R*1.18} ${R*2.36} ${R*2.36}`;
+  const lay = id => { const sv = $(id).firstElementChild;
+                      sv.innerHTML = ''; sv.setAttribute('viewBox', vb); return sv; };
+  const gArc = el('g'), gSky = el('g'), gEarth = el('g');
+  lay('lay-asp').append(gArc);
+  lay('lay-ring').append(gSky);
+  lay('lay-body').append(gEarth);
+
+  const outer = R, inner = R * .86, earthR = R * .46;
+  const M = DATA.mansions;
+
+  // 地：先算每个州摆在哪。方位是真的，半径按离洛阳的远近压缩到一个薄环里 ——
+  // 按真实比例摆的话三河与雍州会叠在一起，读不出来。
+  const maxD = Math.max(...DATA.zhou.map(z => z.dist));
+  const zpos = {}, placed = [];
+  for (const z of [...DATA.zhou].sort((a, b) => a.bear - b.bear)){
+    let b = z.bear;
+    /* 相邻两州靠得太近就推开：冀州 26.9° 与幽州 31.8° 只差五度，
+       名字会压在一起。这里判的是**角距小于阈值**才推 ——
+       第一版写成了「大于 158 度才推」，意思正好反了，
+       而且它照样会终止，所以不看数字发现不了。 */
+    const gap = (a, c) => Math.abs(((a - c + 540) % 360) - 180);
+    let guard = 0;
+    while (placed.some(q => gap(b, q) < 9) && guard++ < 200) b += 1.5;
+    placed.push(b);
+    const rr = earthR * (.34 + .66 * (z.dist / maxD));
+    zpos[z.n] = { x: Math.sin(b * Math.PI / 180) * rr,
+                  y: -Math.cos(b * Math.PI / 180) * rr, b, z };
+  }
+
+  // 天：外圈二十八宿，宿度不等
+  const lit = new Set();          // 七政落在哪几宿
+  const SEVEN = ['太阳', '月亮', '水星', '金星', '火星', '木星', '土星'];
+  for (const n of SEVEN) lit.add(M[chart.bodies[n].xiu].n);
+
+  M.forEach((m, i) => {
+    const on = lit.has(m.n);
+    const p = el('path', { d: arcPath(off(m.ra), off(m.ra + m.deg), inner, outer) },
+                 'sec xiang-' + m.xiang[0] + (on ? ' fylit' : ''));
+    p.addEventListener('click', () => show('xiu', i));
+    p.addEventListener('mousemove', e => card(e, m.n + '宿',
+      `${m.xiang}　宿度 ${m.deg.toFixed(1)}°　分野 ${m.guo}·${m.zhou}`,
+      m.zhan, DATA.fw));
+    p.addEventListener('mouseleave', hideCard);
+    gSky.appendChild(p);
+    const [tx, ty] = pos(off(m.ra + m.deg / 2), (inner + outer) / 2);
+    const t = el('text', { x: tx, y: ty + 5 }, 'xname' + (on ? ' fylit' : ''));
+    t.textContent = m.n; gSky.appendChild(t);
+  });
+
+  // 弧：每一宿连到它的州。二次贝塞尔，控制点往圆心收，弧才不会互相压
+  M.forEach(m => {
+    const zp = zpos[m.zhou]; if (!zp) return;
+    const [sx, sy] = pos(off(m.ra + m.deg / 2), inner - 6);
+    const cx = (sx + zp.x) * .18, cy = (sy + zp.y) * .18;
+    const on = lit.has(m.n);
+    const a = el('path', {
+      d: `M${sx.toFixed(1)} ${sy.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} `
+       + `${zp.x.toFixed(1)} ${zp.y.toFixed(1)}`,
+    }, 'fyarc' + (on ? ' on' : ''));
+    a.addEventListener('mousemove', e => card(e, `${m.n}宿 → ${m.guo}·${m.zhou}`,
+      `${m.xiang}　宿度 ${m.deg.toFixed(1)}°`,
+      '分野：把天上的宿配到地上的国与州。',
+      on ? `此盘有七政落在${m.n}宿 —— 所以这一条亮着。` : DATA.fw));
+    a.addEventListener('mouseleave', hideCard);
+    a.addEventListener('click', () => show('xiu', M.indexOf(m)));
+    gArc.appendChild(a);
+  });
+
+  // 地上的点与名
+  for (const z of DATA.zhou){
+    const q = zpos[z.n];
+    const g = el('g', {}, 'zhou');
+    g.appendChild(el('circle', { cx: q.x, cy: q.y, r: 16, fill: 'transparent' }));
+    g.appendChild(el('circle', { cx: q.x, cy: q.y, r: 4 }, 'zdot'));
+    const t = el('text', { x: q.x, y: q.y - 10 }, 'zname');
+    t.textContent = z.n; g.appendChild(t);
+    g.addEventListener('mousemove', e => {
+      const xs = M.filter(m => m.zhou === z.n).map(m => m.n);
+      card(e, z.n, `代表地 ${z.city}　自洛阳 ${z.bear.toFixed(0)}° 方位`,
+        `配到这一州的是：${xs.join('、')}宿。`,
+        '古州是一片地不是一个点。这里取一个代表地的今坐标，'
+        + '只用来定它在图上朝哪个方向。');
+    });
+    g.addEventListener('mouseleave', hideCard);
+    gEarth.appendChild(g);
+  }
+  // 圆心：洛阳。方位是从这里量的，得标出来
+  gEarth.appendChild(el('circle', { r: 2.5 }, 'zcenter'));
+  const lt = el('text', { x: 0, y: 16 }, 'zname zc');
+  lt.textContent = '洛阳'; gEarth.appendChild(lt);
+
+  gSky.appendChild(el('circle', { r: inner }, 'gui'));
+  gSky.appendChild(el('circle', { r: outer }, 'gui'));
+  gEarth.appendChild(el('circle', { r: earthR }, 'gui fydim'));
+  for (const [b, txt] of [[0, '北'], [90, '东'], [180, '南'], [270, '西']]){
+    const t = el('text', {
+      x: Math.sin(b * Math.PI / 180) * (earthR + 15),
+      y: -Math.cos(b * Math.PI / 180) * (earthR + 15) + 4,
+    }, 'mark');
+    t.textContent = txt; gEarth.appendChild(t);
   }
 }
 
@@ -1562,6 +1683,17 @@ export function mount(){
   $('back').addEventListener('click', closePanel);
   addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
+  /* 宿盘／分野。只在中式盘下出现（body.east 控制显隐）。 */
+  document.querySelectorAll('#cnseg button').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.classList.contains('on')) return;
+      document.querySelectorAll('#cnseg button')
+        .forEach(x => x.classList.toggle('on', x === b));
+      cnView = b.dataset.c;
+      closePanel(); draw(); flyIn(true);
+    });
+  });
+
   /* 我想问。选完只留那一节，并把「像不像你」换成对应的几条。 */
   const askSel = $('askq');
   for (const [k, label] of ASK){
@@ -1596,9 +1728,9 @@ export function mount(){
   /* 必须限定在顶栏里。口吻那组也是 .seg（借的同一套样式），
      不限定的话点「术语」会连带把 mode 设成 undefined，盘直接跳到中式 ——
      加完那组按钮第一次点就撞上了。 */
-  document.querySelectorAll('#bar .seg button').forEach(b => {
+  document.querySelectorAll('#modeseg button').forEach(b => {
     b.addEventListener('click', () => {
-      document.querySelectorAll('#bar .seg button').forEach(x => x.classList.remove('on'));
+      document.querySelectorAll('#modeseg button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
       mode = b.dataset.m;
       document.body.classList.toggle('east', mode === 'east');

@@ -366,6 +366,29 @@ body:not(.read-off) #readtoggle{right:330px}
 .sv{font-size:13.5px;color:var(--ink);letter-spacing:.03em;
   font-variant-numeric:tabular-nums}
 
+/* ── 分野图 ───────────────────────────────────────
+   外圈是天（二十八宿按赤经，宿度不等），内圈是地（十二州按自洛阳的方位），
+   中间的弧是《汉书·地理志》那套对应。落了七政的那几条亮起来。 */
+#cnseg{display:none}
+body.east #cnseg{display:flex}
+.fyarc{
+  fill:none;stroke:rgba(232,226,212,.20);stroke-width:.8;cursor:pointer;
+  transition:stroke .25s ease,stroke-width .25s ease;
+}
+.fyarc:hover{stroke:var(--gold);stroke-width:2}
+.fyarc.on{stroke:rgba(217,180,95,.75);stroke-width:1.6;
+  filter:drop-shadow(0 0 4px rgba(217,180,95,.5))}
+.sec.fylit{fill:rgba(217,180,95,.16)}
+.xname.fylit{fill:var(--gold)}
+.zhou{cursor:pointer}
+.zdot{fill:var(--gold);stroke:none}
+.zhou:hover .zdot{r:6}
+.zname{font-size:calc(12px * var(--cfs));fill:rgba(232,226,212,.88);
+  text-anchor:middle;pointer-events:none;font-family:var(--song);letter-spacing:.06em}
+.zname.zc{fill:var(--zhu)}
+.zcenter{fill:var(--zhu);stroke:none}
+.gui.fydim{stroke:rgba(232,226,212,.10);stroke-dasharray:3 5}
+
 /* ── 我想问 ───────────────────────────────────────
    反馈之前是「点进去不知道怎么操作」。补了引导之后还剩一层问题：
    知道怎么操作，不知道该看哪儿 —— 一份七十多行的报告摊在那里，

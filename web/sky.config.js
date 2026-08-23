@@ -9,12 +9,57 @@ import { BY_LAT, label } from './places.js?v=3deca637';
 const R = 380;                     // 图面半径，引擎也用它
 const rad = d => d * Math.PI / 180;
 
+/* ── 两种看法：摊平的一张图，或者一只能转的球 ──────────────
+   平面那张是苏州石刻的形制，一千年来中国星图都这么画。
+   它有个避不开的毛病：r 正比于天极距，所以南天被越拉越大 ——
+   南极附近撑成一整圈，猎户座下面那片全是变形的。
+   球面那张没有这个问题，因为它压根不是投影，就是从外面看这个球。
+
+   两种都留着，不是骑墙：摊平的能一眼看全整个天区，也是文物本来的样子；
+   球面的形状是对的，还能转。切换在右上角。 */
+export const VIEW = { mode: 'flat', lon: 0, lat: 32 };
+
 /** 北极方位等距投影 —— 苏州石刻的形制。
  *  r 正比于天极距，赤经决定方位角。上北、右西（赤经自右向左递增）。*/
-function project(ra, dec){
+function flat(ra, dec){
   const r = (90 - dec) / 180 * R * 2;
   const a = rad(ra) - Math.PI / 2;
   return [Math.cos(a) * r, Math.sin(a) * r];       // 不取反 => 西在右
+}
+
+/** 赤道坐标转单位向量。整个球面模式就架在这三行上。 */
+function vec(ra, dec){
+  const t = rad(ra), p = rad(dec);
+  return [Math.cos(p) * Math.cos(t), Math.cos(p) * Math.sin(t), Math.sin(p)];
+}
+
+/** 把向量转到「视线坐标」：先绕极轴转到中心赤经，再俯仰到中心赤纬。
+ *  返回 [右, 上, 朝我] —— 第三个分量大于零就是朝着观者这一面。 */
+function toView(v){
+  const l = rad(VIEW.lon), b = rad(VIEW.lat);
+  const cl = Math.cos(l), sl = Math.sin(l);
+  // 绕 z 轴 −lon
+  const x1 = v[0] * cl + v[1] * sl;
+  const y1 = -v[0] * sl + v[1] * cl;
+  const z1 = v[2];
+  // 绕 y 轴：把 (lat) 抬到视线中心
+  const cb = Math.cos(b), sb = Math.sin(b);
+  return [y1, -x1 * sb + z1 * cb, x1 * cb + z1 * sb];
+}
+
+const SR = R * 1.86;               // 球的画面半径。跟平面图占的地方差不多
+export function depth(ra, dec){ return toView(vec(ra, dec))[2]; }
+
+/** 正交投影：直接取视线坐标的前两个分量。远近由第三个分量决定，
+ *  但正交投影不做透视缩放 —— 那正是「从很远的地方看这个球」的样子，
+ *  也是天球该有的样子：星星本来就无穷远。 */
+function ortho(ra, dec){
+  const w = toView(vec(ra, dec));
+  return [-w[0] * SR, -w[1] * SR];   // 取反保持右西上北，跟平面图一致
+}
+
+function project(ra, dec){
+  return VIEW.mode === 'sphere' ? ortho(ra, dec) : flat(ra, dec);
 }
 
 /** 成员星之间的最大角距（度）。判断星官是不是被投影撕开要用它：
@@ -69,11 +114,48 @@ export const CFG = {
   visible: (f, lat) => f[1] >= horizonDec(lat),     // f = [ra, dec, mag]
   artUsable,
 
-  rings: (D, lat) => [
+  rings: (D, lat) => VIEW.mode === 'sphere' ? [] : [
     [(90 - (90 - lat)) / 180 * R * 2, 'gui', '恒显圈'],
     [(90 - 0) / 180 * R * 2, 'gui equator', '赤道'],
     [(90 - horizonDec(lat)) / 180 * R * 2, 'gui horizon', '外规'],
   ],
+
+  /* 球面模式下三规不再是圆 —— 赤道在球上是一个大圆，看过去是椭圆，
+     而且有一半在背面。所以改成沿赤纬采样、逐点投影、背面断开的折线。
+     采样一度一点：三百六十个点，画出来的边缘看不出是折线。 */
+  ringPaths: (D, lat) => {
+    if (VIEW.mode !== 'sphere') return [];
+    const ring = dec => {
+      const segs = []; let cur = [];
+      for (let ra = 0; ra <= 360; ra += 1){
+        if (depth(ra, dec) > 0){ cur.push(project(ra, dec)); }
+        else if (cur.length){ segs.push(cur); cur = []; }
+      }
+      if (cur.length) segs.push(cur);
+      return segs.filter(sg => sg.length > 1)
+        .map(sg => 'M' + sg.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'))
+        .join(' ');
+    };
+    const out = [
+      [ring(0), 'gui equator', '赤道'],
+      [ring(90 - lat), 'gui', '恒显圈'],
+      [ring(horizonDec(lat)), 'gui horizon', '外规'],
+    ];
+    // 球的边缘。它不是天上的圈，是「这个球到此为止」，所以单画一道。
+    const limb = [];
+    for (let a = 0; a <= 360; a += 2)
+      limb.push([Math.cos(rad(a)) * R * 1.86, Math.sin(rad(a)) * R * 1.86]);
+    out.push(['M' + limb.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L') + 'Z',
+              'gui limb', '']);
+    return out;
+  },
+
+  /* 球面模式下背面的星不画。压暗也试过，读起来像重影 ——
+     一颗前面的星和一颗背面的星投到同一个点上，谁也说不清哪个是哪个。
+     球就该是不透明的。转过去看背面。 */
+  cull: (f) => VIEW.mode === 'sphere' && depth(f[0], f[1]) <= 0.015,
+  rotatable: () => VIEW.mode === 'sphere',
+  VIEW,
 
   tipRows(hip, D, below){
     const [ra, dec, mag] = D.stars[hip];

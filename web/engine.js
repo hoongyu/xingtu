@@ -67,6 +67,21 @@ function build(){
 
   const tierV = CFG.tiers[site][1];
 
+  /* 球面模式下三规不是圆而是折线（大圆看过去是椭圆，还有一半在背面），
+     由配置算好 d 交过来。平面模式这里返回空数组，走下面的老路。 */
+  for (const [d, cls, label] of (CFG.ringPaths ? CFG.ringPaths(DATA, tierV) : [])){
+    if (!d) continue;
+    const q = document.createElementNS(NS,'path');
+    q.setAttribute('d', d); q.setAttribute('class', cls);
+    gGui.appendChild(q);
+    if (label){
+      const t = document.createElementNS(NS,'text');
+      t.setAttribute('class','gui-label');
+      t.setAttribute('x', 6); t.setAttribute('y', -R * 1.9);
+      t.textContent = label; gGui.appendChild(t);
+    }
+  }
+
   // 参考圈：星图是三规，概念图是抽象层级圈。半径由配置算。
   for (const [r, cls, label] of CFG.rings(DATA, tierV)){
     const c = document.createElementNS(NS,'circle');
@@ -113,8 +128,10 @@ function build(){
       .sort((a, b) => CFG.dim(stars[b]) - CFG.dim(stars[a]))
       .slice(0, TWINKLE_MAX));
 
+  const culled = CFG.cull || (() => false);
   for (const hip of used){
     const f = stars[hip];
+    if (culled(f)) continue;              // 球背面，不建元素
     const [x, y] = project(f[0], f[1]);
     const below = !CFG.visible(f, tierV);
     if (below) lostCount++;
@@ -155,6 +172,9 @@ function build(){
     const ds = [];
     let acc = 0;
     for (const line of g.lines){
+      // 球面模式：折线只要有一端转到背面，整条就不画。
+      // 只画一半会出现连到球外的直线，比缺一条更难看。
+      if (line.some(h => culled(stars[h]))) continue;
       const pts = line.map(h => project(...stars[h].slice(0,2)));
       let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
       let len = 0;
@@ -178,10 +198,20 @@ function build(){
     g._total = acc;
     g._d = ds;
 
-    // 星官名：放在成员星的重心
+    /* 星官名：放在成员星的重心。
+       球面模式下重心只能按**看得见的那几颗**算 —— 一个半转过去的星官，
+       按全体算出来的重心会落到球外面去。
+       但 _members 必须是全体：检索、跳转、面板统计都靠它，
+       按可见成员建集合的话，转个角度这些就跟着坏了。
+       第一版这里直接 continue 掉了，_members 成了 undefined —— 检索当场炸。*/
     const all = g.lines.flat();
-    const cx = all.reduce((s,h)=>s+project(...stars[h].slice(0,2))[0],0)/all.length;
-    const cy = all.reduce((s,h)=>s+project(...stars[h].slice(0,2))[1],0)/all.length;
+    const vis = all.filter(h => !culled(stars[h]));
+    g._members = new Set(all);
+    g._mini = null;
+    g._label = null;
+    if (!vis.length){ g._center = null; continue; }
+    const cx = vis.reduce((s,h)=>s+project(...stars[h].slice(0,2))[0],0)/vis.length;
+    const cy = vis.reduce((s,h)=>s+project(...stars[h].slice(0,2))[1],0)/vis.length;
     const t = document.createElementNS(NS,'text');
     t.setAttribute('x', cx); t.setAttribute('y', cy - 14);
     t.setAttribute('text-anchor','middle');
@@ -189,9 +219,7 @@ function build(){
     t.textContent = g.name;
     gName.appendChild(t);
     g._label = t;
-    g._members = new Set(all);
     g._center = [cx, cy];
-    g._mini = null;
 
     // 有讲解的星官在全天图上留一道极淡轮廓 —— 它同时是「这里点得开」的提示。
     // 相位按名字散列错开，整片天才会像在各自闪，而不是一起呼吸。
@@ -242,6 +270,134 @@ function build(){
   CUL = cul; NODEOF = nodeOf;
   window._nodeOf = nodeOf;
   window._groups = cul.groups;              // 供自动化核对，不参与渲染
+}
+
+/* ── 转球 ────────────────────────────────────────
+   为什么拖的时候画到 canvas，松手才回 SVG：量过。
+   这张图有 3191 个要动的元素（1386 颗星、1386 个命中圈、419 条连线）。
+     逐个改 cx/cy/d 再走一次布局：每帧 30–40 ms → 25 fps，拖起来是黏的
+     同样数量画到 canvas，含三维旋转与背面剔除：每帧 0.4–2.5 ms
+   差二十到四十倍。所以拖动期间盖一张 canvas 顶上去，SVG 藏起来；
+   松手重建一次 SVG（约 40–50 ms，一次，看不出来），交互全回来。
+
+   没上 WebGL：three.js 是 178 KB gzip、globe.gl 是 494 KB（都实测过），
+   而这站最大的资源是 522 KB 的字体、GSAP 才 27 KB —— 为一个转球把体积
+   翻一倍不划算，而 2D canvas 已经快到用不完。 */
+let spinCv = null, spinning = false;
+
+function ensureSpinCanvas(){
+  if (spinCv) return spinCv;
+  spinCv = document.createElement('canvas');
+  spinCv.id = 'spin';
+  document.body.insertBefore(spinCv, svg.nextSibling);
+  return spinCv;
+}
+
+/** 拖动中的那一帧。只画星与连线 —— 名字与命中圈在这一帧不需要。 */
+function paintSpin(){
+  if (!DATA || !CUL) return;
+  const cv = ensureSpinCanvas();
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const r = svg.getBoundingClientRect();
+  if (cv.width !== Math.round(r.width * dpr)){
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  // viewBox 到屏幕的换算，跟 svg 的 xMidYMid meet 一致
+  const vb = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  const k = Math.min(cv.width / vb[2], cv.height / vb[3]);
+  ctx.setTransform(k, 0, 0, k, cv.width / 2 - (vb[0] + vb[2] / 2) * k,
+                                cv.height / 2 - (vb[1] + vb[3] / 2) * k);
+
+  const stars = DATA.stars, tierV = CFG.tiers[site][1];
+  const culled = CFG.cull || (() => false);
+  // 球的边缘先画，给它一个实体感
+  ctx.beginPath(); ctx.arc(0, 0, R * 1.86, 0, 6.2832);
+  ctx.fillStyle = 'rgba(12,16,26,.55)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(232,226,212,.20)'; ctx.lineWidth = 1.1 / k * k; ctx.stroke();
+
+  ctx.fillStyle = '#e8e2d4';
+  for (const hip of spinPts){
+    const f = stars[hip];
+    if (culled(f)) continue;
+    const [x, y] = project(f[0], f[1]);
+    ctx.globalAlpha = CFG.visible(f, tierV) ? CFG.dim(f) : .12;
+    ctx.beginPath(); ctx.arc(x, y, CFG.radius(f), 0, 6.2832); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(217,180,95,.42)';
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  for (const g of CUL.groups)
+    for (const line of g.lines){
+      if (line.some(h => culled(stars[h]))) continue;
+      line.forEach((h, i) => {
+        const [x, y] = project(...stars[h].slice(0, 2));
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+    }
+  ctx.stroke();
+}
+
+let spinPts = [];
+function bindSpin(){
+  if (!CFG.rotatable) return;
+  let drag = null, raf = 0;
+  const down = e => {
+    if (!CFG.rotatable() || sel) return;      // 缩进某个星官时不转
+    drag = { x: e.clientX, y: e.clientY, lon: CFG.VIEW.lon, lat: CFG.VIEW.lat };
+    spinPts = [...CUL.groups].flatMap(g => [...g._members]);
+    // 加上不属于任何星官的散星，不然转起来天是空的
+    spinPts = [...new Set(spinPts.concat(Object.keys(DATA.stars)))];
+    spinning = true;
+    document.body.classList.add('spinning');
+    paintSpin();
+    // 捕获失败不该让整次拖拽作废（合成事件、某些触摸栈会抛）
+    try { svg.setPointerCapture && svg.setPointerCapture(e.pointerId); } catch (_){}
+  };
+  const move = e => {
+    if (!drag) return;
+    e.preventDefault();
+    const r = svg.getBoundingClientRect();
+    // 一个球宽拖满 = 转 180 度。这个手感跟大多数地球仪一致
+    const f = 180 / Math.max(240, Math.min(r.width, r.height));
+    CFG.VIEW.lon = drag.lon + (e.clientX - drag.x) * f;
+    CFG.VIEW.lat = Math.max(-89, Math.min(89, drag.lat + (e.clientY - drag.y) * f));
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintSpin(); });
+  };
+  const up = () => {
+    if (!drag) return;
+    drag = null; spinning = false;
+    document.body.classList.remove('spinning');
+    build();                                   // 一次性重建，约 40–50 ms
+  };
+  svg.addEventListener('pointerdown', down);
+  addEventListener('pointermove', move, { passive: false });
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', up);
+}
+
+/** 平面／天球切换。只有星图有，概念图那份配置里没有 VIEW。 */
+function bindView(){
+  if (!CFG.VIEW) return;
+  const box = document.getElementById('where');
+  const seg = document.createElement('div');
+  seg.className = 'seg viewseg';
+  seg.innerHTML = '<button data-v="flat" class="on">平 面</button>'
+                + '<button data-v="sphere">天 球</button>';
+  box.insertBefore(seg, box.firstChild);
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.classList.contains('on')) return;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    if (sel) close();
+    CFG.VIEW.mode = b.dataset.v;
+    document.body.classList.toggle('sphere', CFG.VIEW.mode === 'sphere');
+    build();
+  });
 }
 
 // 点击只注册一次。它原来写在 build() 里面，于是每切一次中西就多挂一个
@@ -376,14 +532,14 @@ function hoverGroup(g, e){
   unhoverGroup();
   hoverG = g;
   g._paths.forEach(q => q.classList.add('lit'));
-  g._label.classList.add('lit');
+  if (g._label) g._label.classList.add('lit');
   ensureFig(g)?.classList.add('on');
   showCard(g, e);
 }
 function unhoverGroup(){
   if (!hoverG) return;
   hoverG._paths.forEach(q => q.classList.remove('lit'));
-  hoverG._label.classList.remove('lit');
+  if (hoverG._label) hoverG._label.classList.remove('lit');
   hoverG._fig?.classList.remove('on');
   hoverG = null;
   hideCard();
@@ -468,7 +624,7 @@ function open(g, nodeOf, ms = 900){
   // 连完才浮出名字与讲解
   // 连完线才浮出：名字、象形、讲解 —— 这就是「整体效果」那一刻
   revealT = setTimeout(() => {
-    g._label.classList.add('show');
+    if (g._label) g._label.classList.add('show');
     ensureFig(g)?.classList.add('on');
     showPanel(g);
     markChips();
@@ -483,7 +639,7 @@ function close(){
   document.body.classList.remove('open');
   svg.classList.remove('zoomed');
   document.getElementById('panel').classList.remove('show');
-  g._label.classList.remove('show');
+  if (g._label) g._label.classList.remove('show');
   g._paths.forEach(p => p.classList.remove('draw','armed'));
   document.querySelectorAll('.link').forEach(p => p.classList.remove('other'));
   document.querySelectorAll('.star').forEach(n => n.classList.remove('member','dimmed'));
@@ -584,10 +740,14 @@ srcBox.addEventListener('click', e => {
 addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
 function bindSeg(){
-document.querySelectorAll('.seg button').forEach(b => {
+/* 必须限定成 #bar 的直接子元素。「平面／天球」那组也是 .seg（借同一套样式），
+   不限定的话点它会把 culture 设成 undefined，DATA.cultures[undefined].groups
+   当场抛错 —— build() 死在三规之后、星点之前，屏幕上只剩三个圈。
+   星盘页加「口吻」开关时踩过一模一样的坑，这是第二次。 */
+document.querySelectorAll('#bar > .seg button').forEach(b => {
   b.addEventListener('click', () => {
     if (sel) close();
-    document.querySelectorAll('.seg button').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('#bar > .seg button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     culture = b.dataset.c;
     document.getElementById('hint').textContent = CFG.text.hint(culture);
@@ -611,6 +771,9 @@ if (CFG.text.siteLabel){
   sel_site.parentNode.insertBefore(lb, sel_site);
 }
 sel_site.addEventListener('change', () => { if (sel) close(); site = +sel_site.value; build(); });
+
+bindSpin();
+bindView();
 
 addEventListener('resize', () => {
   if (!sel) build();
@@ -663,7 +826,7 @@ function goto(name){
   if (culture !== e.c){
     if (sel) close();
     culture = e.c;
-    document.querySelectorAll('.seg button')
+    document.querySelectorAll('#bar > .seg button')
       .forEach(b => b.classList.toggle('on', b.dataset.c === culture));
     document.getElementById('hint').textContent = CFG.text.hint(culture);
     build();
