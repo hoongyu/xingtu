@@ -435,6 +435,11 @@ body.spinning #earth{opacity:1}
 }
 body.spinning #spin{display:block}
 body.spinning #sky{visibility:hidden}
+/* touch-action 必须关掉，否则手机上一拖是页面在滚，不是图在动 ——
+   pointermove 收得到事件，但浏览器已经把它当成滚动手势接管了。 */
+#sky.zoomed{cursor:grab;touch-action:none}
+body.sphere #sky{touch-action:none}
+body.panning #sky.zoomed{cursor:grabbing}
 body.sphere #sky{cursor:grab}
 body.sphere.spinning #sky{cursor:grabbing}
 /* 球的边缘：不是天上的圈，是「这个球到此为止」，所以比三规更淡 */

@@ -787,6 +787,80 @@ async function makeDaily(){
     `日签_${y}${String(mo).padStart(2,'0')}${String(d).padStart(2,'0')}.png`, host);
 }
 
+/* ── 缩进之后拖着看 ──────────────────────────────
+   点进一个星官之后，原来只能退回全天再点下一个。
+   现在可以直接拖：上下左右挪视野，**屏幕正中是谁，就自动亮谁**。
+   这比「退出去再点」顺得多 —— 星官本来就是挨着的，
+   看完仙女座顺手往右一推就是英仙座，那正是在天上找星的样子。
+
+   实现上两件事要小心：
+
+   一、**平移只改 viewBox 的 x/y，不改 w/h**，所以缩放级别不变，
+       而且一帧只写一个属性 —— 不需要像转球那样走 canvas。
+   二、**拖完那一下的 click 要吞掉**。不吞的话松手会触发 svg 的点击，
+       pick 到另一个星官再 open 一次，把刚拖到的位置又拽走。 */
+let panning = false, panMoved = false;
+
+/** 屏幕正中最近的那个星官。太远就不换 —— 拖到空处不该乱跳。 */
+function centerGroup(){
+  if (!CUL) return null;
+  const vb = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  const cx = vb[0] + vb[2] / 2, cy = vb[1] + vb[3] / 2;
+  const lim = vb[2] * 0.5;
+  let best = null, bd = Infinity;
+  for (const g of CUL.groups){
+    if (!g._center) continue;                       // 转到球背面去了
+    /* 也要有线可点亮。天球上贴着边缘的星官，成员有一半在背面，
+       连线整条不画 —— 切过去屏幕上什么都不亮，看着像没反应。 */
+    if (!g._paths || !g._paths.length) continue;
+    const d = Math.hypot(g._center[0] - cx, g._center[1] - cy);
+    if (d < bd){ bd = d; best = g; }
+  }
+  return bd < lim ? best : null;
+}
+
+function bindPan(){
+  let drag = null, last = 0;
+  const down = e => {
+    if (!sel) return;                    // 只在缩进状态下平移；全天图归转球管
+    const vb = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+    drag = { x: e.clientX, y: e.clientY, vb };
+    panning = true; panMoved = false;
+    document.body.classList.add('panning');
+    try { svg.setPointerCapture && svg.setPointerCapture(e.pointerId); } catch (_){}
+  };
+  const move = e => {
+    if (!drag) return;
+    e.preventDefault();
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) panMoved = true;
+    const r = svg.getBoundingClientRect();
+    // 屏幕像素换算成 viewBox 单位。meet 拟合下比例由较小的那一边定。
+    const k = drag.vb[2] / Math.max(1, Math.min(r.width, r.height));
+    setVB([drag.vb[0] - dx * k, drag.vb[1] - dy * k, drag.vb[2], drag.vb[3]]
+          .map(n => n.toFixed(1)).join(' '));
+    // 换选中不必每帧都做，九十毫秒一次够跟手了，也省下一次全量重排
+    const now = performance.now();
+    if (now - last < 90) return;
+    last = now;
+    const g = centerGroup();
+    if (g && g !== sel) open(g, NODEOF, 0, true);
+  };
+  const up = () => {
+    if (!drag) return;
+    drag = null; panning = false;
+    document.body.classList.remove('panning');
+    const g = centerGroup();
+    if (g && g !== sel) open(g, NODEOF, 0, true);
+    // 松手那一下的 click 紧接着来，得留个标记让它自己退出
+    setTimeout(() => { panMoved = false; }, 0);
+  };
+  svg.addEventListener('pointerdown', down);
+  addEventListener('pointermove', move, { passive: false });
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', up);
+}
+
 /** 平面／天球切换。只有星图有，概念图那份配置里没有 VIEW。 */
 function bindView(){
   if (!CFG.VIEW) return;
@@ -853,6 +927,7 @@ function pick(e){
 
 svg.addEventListener('click', e => {
   if (!CUL) return;
+  if (panMoved) return;          // 刚拖过，这一下不是「点」
   const g = pick(e);
   if (!g || g === sel) return;
   // 已经在某个星官里 → 点旁边那颗暗星就直接平移过去，不必先退出再进
@@ -999,7 +1074,7 @@ function svgPoint(e){
 
 let revealT = null;
 
-function open(g, nodeOf, ms = 900){
+function open(g, nodeOf, ms = 900, noFrame = false){
   clearTimeout(revealT);                            // 上一个星官的浮出计时得掐掉
   unhoverGroup(); hideCard();
   document.getElementById('panel').classList.remove('show');
@@ -1029,7 +1104,7 @@ function open(g, nodeOf, ms = 900){
     cx = (Math.min(...xs) + Math.max(...xs)) / 2;
     cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   }
-  frameOn(cx, cy, sz, ms);
+  if (!noFrame) frameOn(cx, cy, sz, ms);
 
   // 非成员星退到背景。先清再加 —— 跳到邻近星官时旧成员否则会同时带两个类
   for (const [hip, node] of nodeOf){
@@ -1051,12 +1126,16 @@ function open(g, nodeOf, ms = 900){
 
   // 连完才浮出名字与讲解
   // 连完线才浮出：名字、象形、讲解 —— 这就是「整体效果」那一刻
-  revealT = setTimeout(() => {
+  /* 平移中切过来的不等生长动画：手还在动，等一秒半才出名字就断了。
+     正常点进来的仍然等 —— 那一刻的「连完线再浮出」是这一页的招牌。 */
+  const reveal = () => {
     if (g._label) g._label.classList.add('show');
     ensureFig(g)?.classList.add('on');
     showPanel(g);
     markChips();
-  }, g._total * 1000 + 320);
+  };
+  if (noFrame) reveal();
+  else revealT = setTimeout(reveal, g._total * 1000 + 320);
 }
 
 function close(){
@@ -1212,6 +1291,7 @@ sel_site.addEventListener('change', () => {
 });
 
 bindSpin();
+bindPan();
 bindView();
 
 /* 日签的入口。只有星图有 —— 概念图没有观测地，也没有「今晚」。 */
