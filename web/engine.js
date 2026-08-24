@@ -758,7 +758,7 @@ async function makeDaily(){
   const [EPH, LUN, CARD] = await Promise.all([
     import('./ephem.js?v=e6ac781a'),
     import('./lunar.js?v=6a22c0e6'),
-    import('./card.js?v=bcea69a1'),
+    import('./card.js?v=14397725'),
   ]);
   await CARD.ready();
 
@@ -1153,6 +1153,7 @@ function bindHover(){
   svg.addEventListener('mouseleave', () => { if (hoverG) unhoverGroup(); });
 }
 
+let firstVisit = false;
 let hoverG = null;
 function hoverGroup(g, e){
   if (sel) return;                                  // 点开之后不再抢注意力
@@ -1425,7 +1426,7 @@ document.querySelectorAll('#bar > .seg:not(.viewseg) button').forEach(b => {
     document.querySelectorAll('#bar > .seg:not(.viewseg) button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     culture = b.dataset.c;
-    document.getElementById('hint').textContent = CFG.text.hint(culture, matchMedia('(hover: none)').matches);
+    document.getElementById('hint').textContent = hintText();
     build();
   });
 });
@@ -1550,7 +1551,7 @@ function goto(name){
     culture = e.c;
     document.querySelectorAll('#bar > .seg:not(.viewseg) button')
       .forEach(b => b.classList.toggle('on', b.dataset.c === culture));
-    document.getElementById('hint').textContent = CFG.text.hint(culture, matchMedia('(hover: none)').matches);
+    document.getElementById('hint').textContent = hintText();
     build();
   }
   const g = CUL && CUL.groups.find(x => x.name === name);
@@ -1708,24 +1709,96 @@ guide.id = 'pguide';
 guide.textContent = CFG.text.guide;
 document.getElementById('panel').appendChild(guide);
 
-/* 头一回来给三行说明，点一下就走，之后不再出现。
-   记在 localStorage 里；隐私上无所谓 —— 存的是「看过了」，不是身份。 */
-if (CFG.text.firstrun && !localStorage.getItem('xingtu-seen')){
+/* 底下那行提示。写的是**当下这一屏能做什么**，所以模式一换它就得跟着换。 */
+function hintText(){
+  return CFG.text.hint(culture, matchMedia('(hover: none)').matches,
+                       CFG.VIEW ? CFG.VIEW.mode === 'sphere' : false);
+}
+
+/* 头一回来给三行说明。
+   上一版只在头一回出现，看过就永远调不回来了 —— 而这种浮层多半是被
+   随手关掉的，关掉才发现没看清。所以现在底下那行提示本身可以点，
+   点了就再放一遍。「说明只讲一次」跟「不知道怎么操作」是同一件事。 */
+let firstrunBox = null;
+function showGuide(){
+  if (!CFG.text.firstrun) return;
+  if (firstrunBox){ firstrunBox.classList.remove('gone'); firstrunBox.classList.add('on'); return; }
   const fr = document.createElement('div');
+  firstrunBox = fr;
   fr.id = 'firstrun';
   fr.innerHTML = CFG.text.firstrun.map((t, i) =>
-    `<div class="fl"><b>${i + 1}</b>${t}</div>`).join('')
+    `<div class="fl"><b>${i + 1}</b><span>${t}</span></div>`).join('')
     + '<div class="fx">知道了</div>';
   document.body.appendChild(fr);
   const dismiss = () => {
-    fr.classList.add('gone');
-    localStorage.setItem('xingtu-seen', '1');
-    setTimeout(() => fr.remove(), 500);
+    fr.classList.add('gone'); fr.classList.remove('on');
+    try { localStorage.setItem('xingtu-seen', '1'); } catch (_){}
   };
   fr.querySelector('.fx').addEventListener('click', dismiss);
-  svg.addEventListener('click', dismiss, { once: true });
+  // 在图上动一下（点或拖）就算看过了，不用非去够那个「知道了」
+  svg.addEventListener('pointerdown', dismiss, { once: true });
   requestAnimationFrame(() => fr.classList.add('on'));
   setTimeout(() => fr.classList.add('on'), 60);   // 后台标签页 rAF 不触发，补一手
+}
+
+{
+  const h = document.getElementById('hint');
+  if (h && CFG.text.firstrun){
+    h.classList.add('askable');
+    h.setAttribute('role', 'button');
+    h.setAttribute('tabindex', '0');
+    h.title = '再看一遍怎么操作';
+    const open = () => showGuide();
+    h.addEventListener('click', open);
+    h.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); }
+    });
+  }
+  try { firstVisit = !localStorage.getItem('xingtu-seen'); } catch (_){}
+  if (firstVisit) showGuide();
+}
+
+/* 头一回来，球自己缓缓转一点点再停下。
+   「这个球能转」是这一屏上最有意思、也最没人猜得到的一件事。
+   写一句「拖动转球」当然也写了，可**演一下比写一句管用**：
+   东西自己动过一次，手就知道能去推它。
+   桌面上还有 grab 光标兜着，手机上一点提示都没有 —— 而微信是主入口。
+
+   三条约束，缺一条这个演示就变成骚扰：
+     · 只在头一回（跟那三行说明同一个开关）
+     · 用户一碰就立刻停，绝不跟手指抢
+     · 系统说了「减少动态效果」就不演 */
+function nudgeSpin(){
+  if (!CFG.VIEW || !CFG.rotatable || !CFG.rotatable() || !CUL || !DATA) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (document.hidden) return;                     // 后台标签页里 rAF 不触发
+
+  const l0 = CFG.VIEW.lon, DEG = 26, MS = 2400;
+  let stopped = false;
+  const settle = () => {
+    spinning = false;
+    document.body.classList.remove('spinning');
+    removeEventListener('pointerdown', halt, true);
+    build();
+  };
+  function halt(){ if (stopped) return; stopped = true; settle(); }
+  // 捕获阶段：比图上那个 pointerdown 先跑，让拖拽接手时场面已经收干净
+  addEventListener('pointerdown', halt, true);
+
+  spinPts = Object.keys(DATA.stars);
+  spinning = true;
+  document.body.classList.add('spinning');        // 光标顺带变成 grabbing
+  const t0 = performance.now();
+  const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const step = now => {
+    if (stopped) return;                          // 用户接手了，别抢
+    const t = Math.min(1, (now - t0) / MS);
+    CFG.VIEW.lon = l0 + DEG * ease(t);
+    paintSpin(); drawEarth();
+    if (t < 1) requestAnimationFrame(step);
+    else { stopped = true; settle(); }
+  };
+  requestAnimationFrame(step);
 }
 
 /* ── 手机与触摸 ─────────────────────────────────
@@ -1766,7 +1839,7 @@ fetch(CFG.data, {cache:'no-cache'}).then(r => r.json()).then(d => {
   document.getElementById('q').placeholder = CFG.text.placeholder;
   document.getElementById('back').textContent = CFG.text.back;
   document.getElementById('srcbody').innerHTML = CFG.credits;
-  document.getElementById('hint').textContent = CFG.text.hint(culture, matchMedia('(hover: none)').matches);
+  document.getElementById('hint').textContent = hintText();
   const seg = document.querySelector('#bar > .seg:not(.viewseg)');
   seg.innerHTML = CFG.cultures.map(([k, label], i) =>
     `<button data-c="${k}"${i === 0 ? ' class="on"' : ''}>${label}</button>`).join('');
@@ -1779,5 +1852,6 @@ fetch(CFG.data, {cache:'no-cache'}).then(r => r.json()).then(d => {
   if (CFG.faceSite && CFG.sites && CFG.VIEW && CFG.VIEW.mode === 'sphere')
     CFG.faceSite(CFG.sites[site].lat, site);
   build();
+  if (firstVisit) nudgeSpin();
 });
 }

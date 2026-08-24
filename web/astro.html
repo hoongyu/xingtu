@@ -9,7 +9,7 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星盘 · 西洋十二宫与中式二十八宿</title>
-<link rel="stylesheet" href="engine.css?v=3ec0731a">
+<link rel="stylesheet" href="engine.css?v=95b9d48c">
 <link rel="stylesheet" href="astro.css?v=a20c1627">
 
 <canvas id="dust"></canvas>
@@ -37,6 +37,9 @@
   </div>
   <div id="where">
     <span id="stamp"></span>
+    <!-- 说明原来只在头一回出现，关掉就再也调不回来。星图那页把它挂在
+         底部提示行上，这页没有那一行，所以单给一个按钮，写法一致。 -->
+    <div id="howbtn" title="再看一遍怎么看">怎 么 看</div>
     <div id="srcbtn">来 源</div>
   </div>
 </div>
@@ -137,6 +140,6 @@ Approximate Positions of the Major Planets</a>。日月：Meeus《Astronomical A
 </div>
 
 <script type="module">
-import { mount } from './astro.js?v=febe98da';
+import { mount } from './astro.js?v=2d755f95';
 mount();
 </script>

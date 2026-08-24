@@ -13,7 +13,7 @@
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=186d15d4';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
-import * as CARD from './card.js?v=bcea69a1';
+import * as CARD from './card.js?v=14397725';
 import { toLunar } from './lunar.js?v=6a22c0e6';
 import * as BIRTH from './birth.js?v=af8e9281';
 
@@ -1871,27 +1871,35 @@ export function mount(){
      而这一页其实更需要：另外两页点哪儿都有反应，这页得先把生辰填进去
      才有东西看，而手机上那张表单默认是收起的。
      记在 localStorage 里，存的是「看过了」，不是身份。 */
-  if (!localStorage.getItem('xingtu-astro-seen')){
+  /* 说明。上一版只在头一回出现，关掉就再也调不回来 ——
+     而这种浮层多半是被随手关掉的，关掉才发现没看清。
+     现在顶栏留一个「怎 么 看」，随时能再放一遍。跟星图那页一个规矩。
+     文案也补了两条原来漏掉的：卡片，和右边那个「具体问什么」。 */
+  let howBox = null;
+  const showHow = () => {
+    if (howBox){ howBox.classList.remove('gone'); howBox.classList.add('on'); return; }
     const fr = document.createElement('div');
+    howBox = fr;
     fr.id = 'firstrun';
     fr.innerHTML = [
-      '左边填出生日期、时间、出生地，按「排 盘」',
-      '盘上任何一个点、一条线，鼠标停上去就说这是什么、为什么跟你有关',
-      '右边解析栏可切「说人话 / 术语」两种口吻',
-    ].map((t, i) => `<div class="fl"><b>${i + 1}</b>${t}</div>`).join('')
+      '左边<b>填出生日期、时间、出生地</b>，按「排 盘」',
+      '盘上任何一个点、一条线，<b>鼠标停上去</b>就说这是什么、为什么跟你有关',
+      '右边可切「<b>说人话 / 术语</b>」两种口吻，上头还能挑<b>具体问什么</b>',
+      '底下「<b>星 空 卡</b>」出一张能存下来的图，还能拨到那天的别的时辰',
+    ].map((t, i) => `<div class="fl"><b>${i + 1}</b><span>${t}</span></div>`).join('')
       + '<div class="fx">知道了</div>';
     document.body.appendChild(fr);
     const dismiss = () => {
-      fr.classList.add('gone');
-      localStorage.setItem('xingtu-astro-seen', '1');
-      setTimeout(() => fr.remove(), 500);
+      fr.classList.add('gone'); fr.classList.remove('on');
+      try { localStorage.setItem('xingtu-astro-seen', '1'); } catch (_){}
     };
     fr.querySelector('.fx').addEventListener('click', dismiss);
-    // 后台标签页里 rAF 不触发，补一手定时器
     requestAnimationFrame(() => fr.classList.add('on'));
     setTimeout(() => fr.classList.add('on'), 60);
-  }
-
+  };
+  const howBtn = $('howbtn');
+  if (howBtn) howBtn.addEventListener('click', showHow);
+  if (!localStorage.getItem('xingtu-astro-seen')) showHow();
   /* 逐条浮现播到一半想直接读全文的，点解析栏任意处即可。
      底下那枚「全部展开」是给不知道能点的人看的提示。 */
   const skipHit = e => {

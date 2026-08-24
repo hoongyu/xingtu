@@ -221,9 +221,11 @@ function drawDome(c, cx, cy, R, spec){
     if (alt <= 0) continue;
     const [x, yy] = domeXY(alt, az, R);
     const mag = f[2];
-    c.globalAlpha = Math.max(.22, 1 - mag * .17);
+    // 跟正文那张图同一条理由：下限太低的话暗星在卡上就是没有。
+    // 卡是给人存下来发出去的，缩到手机上看更吃这个。
+    c.globalAlpha = Math.max(.46, 1 - mag * .12);
     c.beginPath();
-    c.arc(cx + x, cy + yy, Math.max(.7, 2.9 - mag * .48), 0, 6.2832);
+    c.arc(cx + x, cy + yy, Math.max(1.15, 3.1 - mag * .34), 0, 6.2832);
     c.fill();
   }
   c.globalAlpha = 1;
