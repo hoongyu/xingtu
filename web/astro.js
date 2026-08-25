@@ -13,7 +13,7 @@
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=186d15d4';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
-import * as CARD from './card.js?v=d3c8a0a8';
+import * as CARD from './card.js?v=d4470917';
 import { toLunar } from './lunar.js?v=6a22c0e6';
 import * as BIRTH from './birth.js?v=af8e9281';
 

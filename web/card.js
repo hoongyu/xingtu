@@ -321,10 +321,9 @@ export function mount(host, o){
   const bar = el('div', 'cardbar');
   const a = document.createElement('a');
   a.className = 'cardsave'; a.textContent = '存 图'; a.download = '';
-  const tip = el('span', 'cardtip');
-  tip.textContent = '手机上长按图片也能存';
-  bar.append(a, tip);
+  bar.append(a);
   host.appendChild(bar);
+  shareTip(host);          // 「长按图片」那句：存和转发本来就是同一个动作
 
   /* 预览这一张画多大：屏幕上它顶多几百像素宽，1080 的底稿已经绰绰有余。
      真按 devicePixelRatio 算出来常常不到 1，所以只往上取、不往下削。 */
@@ -389,6 +388,8 @@ export function mount(host, o){
     name(){ return o.name(+rng.value); },
   };
 }
+
+function el(tag, cls){ const n = document.createElement(tag); n.className = cls; return n; }
 
 /* ── 滚轮选日期 ────────────────────────────────────
    年月日三列，各自吸附。没有依赖 —— CSS 的 scroll-snap 加一个
@@ -462,62 +463,31 @@ export function wheel(host, init, onPick){
 }
 
 /* ── 转发 ──────────────────────────────────────────
-   **先把能做的和不能做的说清楚，这决定了这个按钮该长什么样。**
+   **这里不放按钮，放一句话。**
 
-   微信内置浏览器里，网页**无法主动唤起分享面板** —— 微信早就取消了
-   这个能力。官方唯一的路是 JS-SDK 的 updateTimelineShareData，
-   而它只是**配置**用户点了微信自己那个「···」之后分享出去的标题图链接，
-   替不了用户去点；何况它要求已认证公众号、配置 JS 安全域名、
-   以及**后端拿 appId/appsecret 算签名**（签名两小时过期，必须服务端算）。
-   这个站没有后端，也不打算碰密钥。
+   微信内置浏览器里，网页无法主动唤起分享面板 —— 微信早就取消了这个能力。
+   官方唯一的路是 JS-SDK 的 updateTimelineShareData，而它只是**配置**用户点了
+   微信自己那个「···」之后分享出去的标题图链接，替不了用户去点；何况它要求
+   已认证公众号、配置 JS 安全域名、以及**后端拿 appId/appsecret 算签名**
+   （签名两小时过期，必须服务端算）。这个站没有后端，也不碰密钥。
 
-   系统浏览器里则可以：navigator.share 能唤起系统分享面板，
-   面板里就有微信和朋友圈，而且 canShare({files}) 成立时能直接把这张
-   PNG 递出去，不是递一个链接让人再点一次。
+   系统浏览器里 navigator.share 倒是能唤起，但那样这个按钮就成了
+   **「在主入口里永远只会解释自己为什么没用」** —— 而微信正是主入口。
+   一个多数时候点了只弹一句说明的按钮，不如一开始就把那句说明摆出来。
 
-   所以这个按钮的逻辑是「能唤起就唤起，不能就把真正可行的那条路说明白」，
-   而不是画一个点了没反应的分享图标。 */
-export function shareBar(host, api, opts = {}){
+   所以：一句醒目的话，直说「长按图片」。这是**在哪儿都成立**的那条路，
+   微信里长按能「发送给朋友」，系统浏览器里长按能存图再发。
+   不用学第二套，也不会点了没反应。 */
+export function shareTip(host){
   const inWeixin = /MicroMessenger/i.test(navigator.userAgent);
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'cardshare';
-  btn.textContent = '转 发';
-  const note = el('div', 'cardnote');
-
-  const wechatWay = () => {
-    note.textContent = inWeixin
-      ? '微信里网页不能直接发朋友圈：长按上面那张图可以发给朋友，'
-        + '或点右上角 ··· 分享到朋友圈'
-      : '这个浏览器不支持系统分享。长按（或右键）图片可以存下来再发';
-    note.classList.add('on');
-  };
-
-  btn.addEventListener('click', () => {
-    api.blob(blob => {
-      const file = new File([blob], api.name(), { type: 'image/png' });
-      const withFile = { files: [file], title: opts.title || '星图', text: opts.text || '' };
-      if (navigator.canShare && navigator.canShare(withFile) && navigator.share){
-        navigator.share(withFile).catch(() => {});
-        return;
-      }
-      if (navigator.share){
-        navigator.share({ title: opts.title || '星图', text: opts.text || '',
-                          url: location.href }).catch(() => {});
-        return;
-      }
-      wechatWay();
-    });
-  });
-  host.appendChild(btn);
-  host.appendChild(note);
-  return btn;
+  const t = el('div', 'cardshare-tip');
+  t.innerHTML = '<b>长按上面那张图</b>，'
+    + (inWeixin ? '发送给朋友；点右上角 ··· 可以分享到朋友圈'
+                : '存下来发给朋友或朋友圈');
+  host.appendChild(t);
+  return t;
 }
 
-
-
-function el(tag, cls){ const n = document.createElement(tag); n.className = cls; return n; }
-
-/** 字体没到就画，出来的是系统字 —— 这张卡的一半是字，等得起。 */
 export async function ready(){
   if (!document.fonts) return;
   try {

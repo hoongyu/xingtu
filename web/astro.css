@@ -437,7 +437,6 @@ body.tab-data #cardbtn{display:none}
   font-family:var(--song);font-size:14px;letter-spacing:.3em;color:var(--void);
   background:var(--gold);padding:11px 26px;text-decoration:none;
 }
-.cardtip{font-size:12px;color:var(--ink-quiet);letter-spacing:.04em}
 #cardwait{text-align:center;color:var(--ink-dim);font-size:14px;padding:60px 0;
   font-family:var(--song);letter-spacing:.2em}
 

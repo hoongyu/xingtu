@@ -758,7 +758,7 @@ async function makeDaily(startAt){
   const [EPH, LUN, CARD, BIRTH] = await Promise.all([
     import('./ephem.js?v=e6ac781a'),
     import('./lunar.js?v=6a22c0e6'),
-    import('./card.js?v=d3c8a0a8'),
+    import('./card.js?v=d4470917'),
     import('./birth.js?v=af8e9281'),
   ]);
   await CARD.ready();
@@ -910,9 +910,6 @@ async function makeDaily(startAt){
       v => { base = { y: v.y, m: v.mo, d: v.d }; api.jump(0); mark(); });
   });
 
-  const bar = host.querySelector('.cardbar');
-  CARD.shareBar(bar, api, { title: '抬头日签 · 星图',
-    text: '这一晚头顶的天。' + location.origin + location.pathname });
 }
 
 /* ── 缩进之后拖着看 ──────────────────────────────
@@ -1118,13 +1115,35 @@ function pickAt(pt, limPx){
 const CLICK_LIM = () => matchMedia('(hover: none)').matches ? 36 : 26;
 function pick(e){ return pickAt(svgPoint(e), CLICK_LIM()); }
 
+/* ── 点开、双击退回 ──────────────────────────────
+   缩进之后要退出，原来只有左上角那枚「收 起」和 Esc。
+   Esc 手机上根本没有，而那枚按钮在角落，眼睛这时正盯着屏幕中间。
+   双击「回到上一层」是地图类界面里的通行手势，这里借来做退出。
+   **那枚按钮保留** —— 手势得有个看得见的同义词，
+   不然不知道有这回事的人就出不去了。
+
+   一个麻烦：双击会先发出两个 click。所以缩进着的时候第一下要等一等，
+   它可能只是双击的前半。等 260 毫秒 —— 只在缩进状态下等，
+   全天图上点开仍然是即时的（那时双击没有意义，不必付这个延迟）。 */
+let clickT = 0;
 svg.addEventListener('click', e => {
   if (!CUL) return;
   if (panMoved) return;          // 刚拖过，这一下不是「点」
   const g = pick(e);
   if (!g || g === sel) return;
-  // 已经在某个星官里 → 点旁边那颗暗星就直接平移过去，不必先退出再进
-  open(g, NODEOF, sel ? 1150 : 900);
+  if (sel){
+    // 已经在某个星官里 → 点旁边那颗暗星就直接平移过去，不必先退出再进
+    clearTimeout(clickT);
+    clickT = setTimeout(() => open(g, NODEOF, 1150), 260);
+    return;
+  }
+  open(g, NODEOF, 900);
+});
+svg.addEventListener('dblclick', e => {
+  clearTimeout(clickT);          // 前半那一下作废
+  if (!sel) return;
+  e.preventDefault();
+  close();
 });
 
 /* ── 插画配准 ─────────────────────────────────────
