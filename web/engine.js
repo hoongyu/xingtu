@@ -652,8 +652,7 @@ function bindSpin(){
        12 ms 一次，约合八十帧，足够跟手。
        小地球跟着一起重画 —— 这正是「转的时候看得见对应的地标」。
        它两百来个元素，这个频率下不贵。 */
-    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4)
-      panMoved = true;                         // 松手那下的 click 要吞掉
+    if (movedEnough(e, drag)) panMoved = true;   // 松手那下的 click 要吞掉
     const now = performance.now();
     if (now - last < 12) return;
     last = now;
@@ -861,6 +860,22 @@ async function makeDaily(){
        pick 到另一个星官再 open 一次，把刚拖到的位置又拽走。 */
 let panning = false, panMoved = false;
 
+/* 「这一下算点还是算拖」的分界，单位是屏幕像素。
+   拖完松手会紧接着来一个 click，不吞掉的话它会当场再打开一个别的星官；
+   可门槛设窄了，正常的点击也会被当成拖。
+
+   上一版写的是曼哈顿距离 > 4。太紧了：鼠标点击本身就带两三像素抖动，
+   **手指点击通常要移五到十五像素** —— 于是手机上点天球基本打不开东西。
+   反馈原话是「天球那个界面似乎不能点击放大」，就是这条。
+   （而我上次验证只发了 pointerdown + pointerup，中间一次 pointermove 都没有，
+     所以测出来是通的。测法不代表真实操作。）
+
+   改成欧氏距离，并且分设备取值：鼠标 8，触摸 14 ——
+   跟浏览器自己判定拖拽起点用的量级一致。 */
+const dragSlop = () => matchMedia('(hover: none)').matches ? 14 : 8;
+const movedEnough = (e, from) =>
+  Math.hypot(e.clientX - from.x, e.clientY - from.y) > dragSlop();
+
 /** 屏幕正中最近的那个星官。太远就不换 —— 拖到空处不该乱跳。 */
 function centerGroup(){
   if (!CUL) return null;
@@ -895,7 +910,7 @@ function bindPan(){
     if (!drag) return;
     e.preventDefault();
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 4) panMoved = true;
+    if (movedEnough(e, drag)) panMoved = true;
     const r = svg.getBoundingClientRect();
     // 屏幕像素换算成 viewBox 单位。meet 拟合下比例由较小的那一边定。
     const k = drag.vb[2] / Math.max(1, Math.min(r.width, r.height));
@@ -1008,11 +1023,20 @@ function pickAt(pt, limPx){
   if (!CUL) return null;
   const vbw = +svg.getAttribute('viewBox').split(/\s+/)[2];
   const lim = limPx * vbw / Math.max(1, svg.getBoundingClientRect().width);
+  /* 背面的星不算 —— 天球是不透明的，投影又不是一一对应：
+     背面一颗星可能正好投到你手指底下。所以要按**星**剔，不是按星官剔。
+     上一版是按星官剔的（「一条线都没画出来就跳过」），
+     可天球上有十八个星官是「星看得见、线一条都画不出来」——
+     一条连线只要有一颗成员转到背面就整条不画，而北斗、天市左垣
+     这些跨度大的最容易中招（天市左垣有十颗在正面）。
+     结果就是：星明明在那儿，点上去没反应。 */
+  const culled = CFG.cull || (() => false);
   let best = null, bd = 1e9;
   for (const g of CUL.groups){
-    if (g._paths && !g._paths.length) continue;     // 转到背面去了，别选它
     for (const h of g._members){
-      const [x, y] = project(...DATA.stars[h].slice(0, 2));
+      const f = DATA.stars[h];
+      if (!f || culled(f)) continue;
+      const [x, y] = project(f[0], f[1]);
       const d = Math.hypot(x - pt.x, y - pt.y);
       if (d < bd){ bd = d; best = g; }
     }
