@@ -33,7 +33,7 @@
    源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=08830b8b') format('woff2');
+  src:url('./wenkai-subset.woff2?v=205732e5') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -419,7 +419,57 @@ body:not(.rail-off) #railtoggle{left:212px}
   font-family:var(--song);font-size:12px;letter-spacing:.2em;color:var(--gold)}
 .cmhome[hidden]{display:none}
 
-.cardbar{display:flex;align-items:center;gap:14px;margin-top:16px;justify-content:center}
+/* ── 日签的视觉指引：这张卡是拿来对照的 ──────────────
+   一张「今晚的天」自己说不出什么，得有个对照面 ——
+   你出生那天头顶是什么样，今晚又是什么样。所以两个锚点摆在轴下面。 */
+.cardguide{margin-top:10px;font-family:var(--song);font-size:12.5px;
+  letter-spacing:.16em;color:var(--ink-quiet);text-align:center}
+.cardanchor{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:9px}
+.canch{background:none;border:1px solid rgba(232,226,212,.22);color:var(--ink-dim);
+  font-family:var(--song);font-size:12.5px;letter-spacing:.2em;
+  padding:6px 13px 6px 16px;cursor:pointer;transition:color .25s,border-color .25s}
+.canch:hover{color:var(--gold);border-color:rgba(217,180,95,.5)}
+.canch.on{color:var(--void);background:var(--gold);border-color:var(--gold)}
+.canch-pick{border-style:dashed}
+.cardlink{font-size:12px;color:var(--gold);text-decoration:none;align-self:center;
+  border-bottom:1px solid rgba(217,180,95,.35)}
+
+/* ── 滚轮选日期 ────────────────────────────────────
+   五行高（5×34=170），第三行是选中位。上下各垫两格空的，
+   头一项和末一项才能滚到中间那条线上 —— card.js 里的
+   scrollTop = i×34 正是按这个几何来的，改高度就要一起改。
+   不用 <input type="date">：各家长相差太远，微信里唤起的是系统面板，
+   整页的语气当场断掉。这张卡通篇竖排小字与朱印，日期控件也该是同一套。 */
+.cwbox{max-height:0;overflow:hidden;transition:max-height .32s var(--ease)}
+.cwbox.on{max-height:210px}
+.cwheel{position:relative;display:flex;gap:6px;height:170px;margin-top:12px}
+.cwcol{flex:1;overflow-y:auto;scroll-snap-type:y mandatory;
+  scrollbar-width:none;-ms-overflow-style:none;text-align:center}
+.cwcol::-webkit-scrollbar{display:none}
+/* 必须是 center：card.js 里 scrollTop = i×34 是按「把第 i 项摆到
+   中间那条线上」推的（上下各两格空垫 + 五行高）。写 start 的话浏览器会把
+   条目顶边贴到容器顶边，跟这个算式差整整两格 —— 实测设 2 月落到 3 月。 */
+.cwit{height:34px;line-height:34px;scroll-snap-align:center;
+  font-family:var(--song);font-size:14px;letter-spacing:.08em;
+  color:var(--ink-quiet);cursor:pointer}
+.cwit.off{opacity:.28}
+.cwpad{height:34px}
+.cwline{position:absolute;left:0;right:0;top:68px;height:34px;pointer-events:none;
+  border-top:1px solid rgba(217,180,95,.35);border-bottom:1px solid rgba(217,180,95,.35)}
+
+/* ── 转发 ──────────────────────────────────────────
+   微信里网页唤不起分享面板（见 card.js 的说明），所以这个按钮在微信里
+   不是失效，而是改说那条真正走得通的路。旁边这行字就是干这个的。 */
+.cardshare{background:none;border:1px solid rgba(217,180,95,.55);color:var(--gold);
+  font-family:var(--song);font-size:14px;letter-spacing:.3em;
+  padding:10px 22px 10px 25px;cursor:pointer;transition:background .25s,color .25s}
+.cardshare:hover{background:var(--gold);color:var(--void)}
+.cardnote{flex-basis:100%;text-align:center;font-size:12px;line-height:1.7;
+  color:var(--ink-quiet);max-height:0;overflow:hidden;transition:max-height .3s ease}
+.cardnote.on{max-height:80px;margin-top:4px}
+
+.cardbar{display:flex;align-items:center;gap:14px;margin-top:16px;
+  justify-content:center;flex-wrap:wrap}
 .cardsave{font-family:var(--song);font-size:14px;letter-spacing:.3em;
   color:var(--void);background:var(--gold);padding:11px 26px;text-decoration:none}
 .cardtip{font-size:12px;color:var(--ink-quiet)}

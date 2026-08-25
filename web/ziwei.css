@@ -35,7 +35,7 @@
    霞鹜文楷，SIL OFL，已裁到只剩本站用到的字。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=08830b8b') format('woff2');
+  src:url('./wenkai-subset.woff2?v=205732e5') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -336,3 +336,14 @@ body.zread-off #zreadtoggle{right:0}
   #zsrc .zbox{max-width:none;width:100%;height:100dvh;max-height:none;
     padding:56px 18px calc(24px + env(safe-area-inset-bottom));border:none}
 }
+
+
+/* 「看这一天的天」—— 带着这里选的日子去星图看那一晚的天。
+   摆在「起 盘」下面，轻一档：它是去别处，不是排盘。 */
+#dailylink{
+  display:block;margin:10px 0 0;padding:10px 0;text-align:center;
+  font-family:var(--song);font-size:13px;letter-spacing:.26em;
+  color:var(--ink-dim);text-decoration:none;
+  border:1px solid var(--jie);transition:color .25s,border-color .25s;
+}
+#dailylink:hover{color:var(--zhu);border-color:var(--zhu-dim)}

@@ -405,6 +405,15 @@ body.east #cnseg{display:flex}
   transition:background .25s ease,color .25s ease;
 }
 #cardbtn:hover{background:var(--gold);color:var(--void)}
+/* 「看这一天的天」跟「星空卡」同一摞，但轻一档 —— 它是去别处，不是出图 */
+#dailylink{
+  display:block;margin:10px 0 0;padding:11px 0;text-align:center;
+  font-family:var(--song);font-size:13px;letter-spacing:.28em;
+  color:var(--ink-dim);text-decoration:none;
+  border:1px solid rgba(232,226,212,.18);transition:color .25s,border-color .25s;
+}
+#dailylink:hover{color:var(--gold);border-color:rgba(217,180,95,.45)}
+body.tab-data #dailylink{display:none}
 body.tab-data #cardbtn{display:none}
 
 #cardbox{

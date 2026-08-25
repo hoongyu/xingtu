@@ -71,6 +71,10 @@ function calendar(){
   }
   box.appendChild(grid);
   $('zdstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
+  // 同星盘：带着这里选的日子去星图看那一晚的天。hash 不进服务器日志。
+  const dl = $('dailylink');
+  if (dl) dl.href = `index.html#daily=${pick.y}-`
+    + `${String(pick.m).padStart(2,'0')}-${String(pick.d).padStart(2,'0')}`;
   BIRTH.forgetBtn($('zdstamp'));
 }
 

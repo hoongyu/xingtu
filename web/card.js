@@ -374,8 +374,146 @@ export function mount(host, o){
 
   paint();
   settle();
-  return { rng };
+  return {
+    rng,
+    /* 跳到某一档。锚点（出生那天／今晚）和滚轮改的是调用方手里的基准日，
+       改完叫这一下重画。 */
+    jump(v){ rng.value = v; clearTimeout(timer); paint(); settle(); },
+    /* 当前这张的 PNG。转发要用它 —— 不能拿预览那张 canvas，
+       那是按屏幕尺寸画的，发出去糊。 */
+    blob(cb){
+      const big = document.createElement('canvas');
+      draw(big, o.spec(+rng.value), 2);
+      big.toBlob(cb, 'image/png');
+    },
+    name(){ return o.name(+rng.value); },
+  };
 }
+
+/* ── 滚轮选日期 ────────────────────────────────────
+   年月日三列，各自吸附。没有依赖 —— CSS 的 scroll-snap 加一个
+   滚动监听就够了，手机上是原生的惯性滚动，桌面上滚轮也能拨。
+
+   为什么不用 <input type="date">：那东西在各家浏览器里长相差太远，
+   而且在微信里唤起的是系统面板，整页的语气当场断掉。
+   这张卡通篇是竖排小字与朱印，日期控件也该是同一套东西。 */
+export function wheel(host, init, onPick){
+  const box = el('div', 'cwheel');
+  const now = new Date();
+  const cols = [
+    { k: 'y', from: 1900, to: now.getFullYear() + 1, suf: '年' },
+    { k: 'mo', from: 1, to: 12, suf: '月' },
+    { k: 'd', from: 1, to: 31, suf: '日' },
+  ];
+  const cur = { ...init };
+  const lists = {};
+
+  const clampDay = () => {
+    const last = new Date(cur.y, cur.mo, 0).getDate();
+    if (cur.d > last){ cur.d = last; scrollTo(lists.d, 'd', true); }
+    // 该月没有的日子灰掉，别让人选出二月三十
+    [...lists.d.children].forEach((n, i) => {
+      if (!n.dataset.v) return;
+      n.classList.toggle('off', +n.dataset.v > last);
+    });
+  };
+  const scrollTo = (ul, k, smooth) => {
+    const c = cols.find(x => x.k === k);
+    const i = cur[k] - c.from;
+    ul.scrollTo({ top: i * ITEM, behavior: smooth ? 'smooth' : 'auto' });
+  };
+  const ITEM = 34;
+
+  for (const c of cols){
+    const ul = el('div', 'cwcol');
+    lists[c.k] = ul;
+    // 上下各垫两格空的，第一项和最后一项才能滚到中间那条线上
+    ul.appendChild(el('div', 'cwpad'));
+    ul.appendChild(el('div', 'cwpad'));
+    for (let v = c.from; v <= c.to; v++){
+      const n = el('div', 'cwit');
+      n.textContent = v + c.suf; n.dataset.v = v;
+      ul.appendChild(n);
+    }
+    ul.appendChild(el('div', 'cwpad'));
+    ul.appendChild(el('div', 'cwpad'));
+    let t = 0;
+    ul.addEventListener('scroll', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const i = Math.round(ul.scrollTop / ITEM);
+        const v = Math.min(c.to, Math.max(c.from, c.from + i));
+        if (v === cur[c.k]) return;
+        cur[c.k] = v;
+        clampDay();
+        onPick({ ...cur });
+      }, 90);
+    }, { passive: true });
+    box.appendChild(ul);
+  }
+  const line = el('div', 'cwline');
+  box.appendChild(line);
+  host.appendChild(box);
+  for (const c of cols) scrollTo(lists[c.k], c.k, false);
+  clampDay();
+  return {
+    set(v){ Object.assign(cur, v); for (const c of cols) scrollTo(lists[c.k], c.k, true); clampDay(); },
+  };
+}
+
+/* ── 转发 ──────────────────────────────────────────
+   **先把能做的和不能做的说清楚，这决定了这个按钮该长什么样。**
+
+   微信内置浏览器里，网页**无法主动唤起分享面板** —— 微信早就取消了
+   这个能力。官方唯一的路是 JS-SDK 的 updateTimelineShareData，
+   而它只是**配置**用户点了微信自己那个「···」之后分享出去的标题图链接，
+   替不了用户去点；何况它要求已认证公众号、配置 JS 安全域名、
+   以及**后端拿 appId/appsecret 算签名**（签名两小时过期，必须服务端算）。
+   这个站没有后端，也不打算碰密钥。
+
+   系统浏览器里则可以：navigator.share 能唤起系统分享面板，
+   面板里就有微信和朋友圈，而且 canShare({files}) 成立时能直接把这张
+   PNG 递出去，不是递一个链接让人再点一次。
+
+   所以这个按钮的逻辑是「能唤起就唤起，不能就把真正可行的那条路说明白」，
+   而不是画一个点了没反应的分享图标。 */
+export function shareBar(host, api, opts = {}){
+  const inWeixin = /MicroMessenger/i.test(navigator.userAgent);
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'cardshare';
+  btn.textContent = '转 发';
+  const note = el('div', 'cardnote');
+
+  const wechatWay = () => {
+    note.textContent = inWeixin
+      ? '微信里网页不能直接发朋友圈：长按上面那张图可以发给朋友，'
+        + '或点右上角 ··· 分享到朋友圈'
+      : '这个浏览器不支持系统分享。长按（或右键）图片可以存下来再发';
+    note.classList.add('on');
+  };
+
+  btn.addEventListener('click', () => {
+    api.blob(blob => {
+      const file = new File([blob], api.name(), { type: 'image/png' });
+      const withFile = { files: [file], title: opts.title || '星图', text: opts.text || '' };
+      if (navigator.canShare && navigator.canShare(withFile) && navigator.share){
+        navigator.share(withFile).catch(() => {});
+        return;
+      }
+      if (navigator.share){
+        navigator.share({ title: opts.title || '星图', text: opts.text || '',
+                          url: location.href }).catch(() => {});
+        return;
+      }
+      wechatWay();
+    });
+  });
+  host.appendChild(btn);
+  host.appendChild(note);
+  return btn;
+}
+
+
 
 function el(tag, cls){ const n = document.createElement(tag); n.className = cls; return n; }
 

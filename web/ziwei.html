@@ -9,7 +9,7 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>紫微斗数 · 十二宫排盘</title>
-<link rel="stylesheet" href="ziwei.css?v=a620fc56">
+<link rel="stylesheet" href="ziwei.css?v=cb588721">
 
 <!-- 纸上的陈设：窗棂、竹枝。都压得很淡，是纸纹不是画面 ——
      这一页真正要被读的是十二宫里的字。
@@ -68,6 +68,8 @@
     <label><input type="radio" name="zsex" value="f"> 坤造（女）</label>
   </div>
   <button id="zcast">起 盘</button>
+  <!-- 同星盘：带着这里选的日子去星图看那一晚的天。 -->
+  <a id="dailylink" href="index.html">看 这 一 天 的 天</a>
   <p class="znote">紫微按农历生辰起盘，本站农历是直接算的，不抄年表。<br>
     时辰以二十三时起子时计。生辰不离开这台机器。</p>
   <div id="zlunar"></div>
@@ -92,6 +94,6 @@
 </div></div>
 
 <script type="module">
-import { mount } from './ziwei.page.js?v=f23be93f';
+import { mount } from './ziwei.page.js?v=605945c3';
 mount();
 </script>

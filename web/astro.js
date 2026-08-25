@@ -13,7 +13,7 @@
 import { compute, houses, houseOf, aspects } from './ephem.js?v=e6ac781a';
 import { PLACES, label as placeLabel } from './places.js?v=186d15d4';
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
-import * as CARD from './card.js?v=14397725';
+import * as CARD from './card.js?v=d3c8a0a8';
 import { toLunar } from './lunar.js?v=6a22c0e6';
 import * as BIRTH from './birth.js?v=af8e9281';
 
@@ -126,6 +126,12 @@ function calendar(){
   }
   box.appendChild(grid);
   $('dstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
+  /* 日签在星图那页，带着这里选的日子过去。
+     用 # 片段不用查询串：hash 不会随请求发出去，也不进服务器日志 ——
+     生辰不出这台设备这条，链接这一步也得守住。 */
+  const dl = $('dailylink');
+  if (dl) dl.href = `index.html#daily=${pick.y}-`
+    + `${String(pick.m).padStart(2,'0')}-${String(pick.d).padStart(2,'0')}`;
   BIRTH.forgetBtn($('dstamp'));
 }
 

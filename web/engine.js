@@ -749,15 +749,17 @@ function runMorph(toSphere, done){
 
    时刻取当地二十一点。不是随手定的：那时天已经黑透，
    而大多数人还没睡。 */
-async function makeDaily(){
+/** startAt 给了就以那一天为基准 —— 从星盘或紫微带日子过来时走这条。 */
+async function makeDaily(startAt){
   const host = document.getElementById('cardhost');
   const box = document.getElementById('cardbox');
   box.classList.add('on');
   host.innerHTML = '<div id="cardwait">正 在 排 今 晚 …</div>';
-  const [EPH, LUN, CARD] = await Promise.all([
+  const [EPH, LUN, CARD, BIRTH] = await Promise.all([
     import('./ephem.js?v=e6ac781a'),
     import('./lunar.js?v=6a22c0e6'),
-    import('./card.js?v=14397725'),
+    import('./card.js?v=d3c8a0a8'),
+    import('./birth.js?v=af8e9281'),
   ]);
   await CARD.ready();
 
@@ -768,8 +770,12 @@ async function makeDaily(){
   const now = new Date();
   const there = new Date(now.getTime()
     + (tz * 60 + now.getTimezoneOffset()) * 60000);
-  const Y0 = there.getFullYear(), M0 = there.getMonth(), D0 = there.getDate();
-  const dayOf = off => { const d = new Date(Y0, M0, D0 + off);
+  const TODAY = { y: there.getFullYear(), m: there.getMonth() + 1, d: there.getDate() };
+  /* 轴的基准日。锚点和滚轮改的是它，轴本身永远是「基准前后各半年」——
+     一根滑杆没法既跨一百年又拨得动一天，所以粗跳交给锚点和滚轮，
+     细拨交给轴。 */
+  let base = startAt && startAt.y ? { ...startAt } : { ...TODAY };
+  const dayOf = off => { const d = new Date(base.y, base.m - 1, base.d + off);
     return [d.getFullYear(), d.getMonth() + 1, d.getDate()]; };
 
   const rad = x => x * Math.PI / 180;
@@ -830,20 +836,83 @@ async function makeDaily(){
 
   /* 轴取今天前后各半年。同一个钟点，一年里天正好转一圈 ——
      拨着看，就看得见「同样是二十一点，冬天和夏天不是同一片天」。 */
-  CARD.mount(host, {
+  const same = (a, b) => a.y === b.y && a.m === b.m && a.d === b.d;
+  const api = CARD.mount(host, {
     from: -182, to: 182, step: 1, value: 0,
     spec: specAt,
     name: off => { const [y, mo, d] = dayOf(off);
       return `日签_${y}${String(mo).padStart(2,'0')}${String(d).padStart(2,'0')}.png`; },
     mark: off => {
-      if (off === 0) return '今 晚';
       const [y, mo, d] = dayOf(off);
-      return `${y}年${mo}月${d}日　${off > 0 ? off + ' 天后' : -off + ' 天前'}`;
+      if (off === 0 && same(base, TODAY)) return '今 晚';
+      const s = `${y}年${mo}月${d}日`;
+      return off === 0 ? s : `${s}　${off > 0 ? off + ' 天后' : -off + ' 天前'}`;
     },
-    homeText: '回 到 今 晚',
+    homeText: '回 到 基 准 日',
     axisLabel: '拨到哪一晚',
     alt: '抬头日签',
   });
+
+  /* ── 视觉指引：这张卡是拿来对照的 ──────────────────
+     一张「今晚的天」本身说不出什么。**它得有个对照面**：
+     你出生那天头顶是什么样，今晚又是什么样 —— 同一片天，隔着你这一生。
+     所以两个锚点摆在轴下面，一句话把这件事说破。
+
+     生辰从本机那份记录来（birth.js），跟星盘、紫微共用一份 ——
+     在那两页填过的日子，到这儿直接就能对照，不用再填一遍。
+     没填过就不摆这个锚点，改成一句「去星盘填一次」，别摆个点了没用的钮。 */
+  const B = BIRTH.load();
+  const guide = document.createElement('div');
+  guide.className = 'cardguide';
+  guide.textContent = B ? '你出生那天的天，和今晚的天' : '拨到任意一天，看那一晚头顶是什么样';
+  const anchors = document.createElement('div');
+  anchors.className = 'cardanchor';
+
+  const goto_ = to => { base = { ...to }; api.jump(0); mark(); };
+  const chips = [];
+  const chip = (label, to, title) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'canch'; b.textContent = label;
+    if (title) b.title = title;
+    b.addEventListener('click', () => goto_(to));
+    chips.push([b, to]); anchors.appendChild(b);
+    return b;
+  };
+  if (B) chip('出 生 那 天', { y: B.y, m: B.m, d: B.d },
+              `${B.y} 年 ${B.m} 月 ${B.d} 日`);
+  chip('今 晚', TODAY);
+  const pickBtn = document.createElement('button');
+  pickBtn.type = 'button'; pickBtn.className = 'canch canch-pick';
+  pickBtn.textContent = '挑 一 天';
+  anchors.appendChild(pickBtn);
+  if (!B){
+    const a2 = document.createElement('a');
+    a2.className = 'cardlink'; a2.href = 'astro.html';
+    a2.textContent = '填过生辰就能跟出生那天对照 →';
+    anchors.appendChild(a2);
+  }
+  const mark = () => chips.forEach(([b, to]) => b.classList.toggle('on', same(base, to)));
+  mark();
+
+  const axis = host.querySelector('.cardaxis');
+  axis.appendChild(guide);
+  axis.appendChild(anchors);
+
+  // 滚轮按需出现 —— 默认不占地方，点「挑一天」才展开
+  let wheelBox = null, wheelApi = null;
+  pickBtn.addEventListener('click', () => {
+    if (wheelBox){ wheelBox.classList.toggle('on'); return; }
+    wheelBox = document.createElement('div');
+    wheelBox.className = 'cwbox on';
+    axis.appendChild(wheelBox);
+    // 滚轮内部用 y/mo/d，base 用 y/m/d —— 在这条边界上转一次，别让两套键混进去
+    wheelApi = CARD.wheel(wheelBox, { y: base.y, mo: base.m, d: base.d },
+      v => { base = { y: v.y, m: v.mo, d: v.d }; api.jump(0); mark(); });
+  });
+
+  const bar = host.querySelector('.cardbar');
+  CARD.shareBar(bar, api, { title: '抬头日签 · 星图',
+    text: '这一晚头顶的天。' + location.origin + location.pathname });
 }
 
 /* ── 缩进之后拖着看 ──────────────────────────────
@@ -1877,5 +1946,23 @@ fetch(CFG.data, {cache:'no-cache'}).then(r => r.json()).then(d => {
     CFG.faceSite(CFG.sites[site].lat, site);
   build();
   if (firstVisit) nudgeSpin();
+  openFromHash();
 });
+
+/* 从星盘或紫微点「看这一天的天」过来：#daily=YYYY-MM-DD。
+   用 hash 不用查询串 —— **hash 不随请求发出去，也不进服务器日志**。
+   生辰不出这台设备这一条，跨页跳转这一步也得守住。
+
+   必须等数据到位再叫：makeDaily 要用 DATA 和已经建好的 #cardbox，
+   第一版写在模块顶层，两样都还没有，静默失败。 */
+function openFromHash(){
+  const m = (location.hash || '').match(/^#daily=(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  const ok = y > 1 && y < 3000 && mo >= 1 && mo <= 12
+          && d >= 1 && d <= new Date(y, mo, 0).getDate();
+  // 用过就抹掉，免得刷新一次又弹一次
+  history.replaceState(null, '', location.pathname + location.search);
+  if (ok) makeDaily({ y, m: mo, d });
+}
 }
