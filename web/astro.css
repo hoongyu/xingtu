@@ -306,7 +306,14 @@ body:not(.read-off) #readtoggle{right:330px}
   #stamp{display:none}
 
   /* 日历：格子 25px 手指点不准，放到 34px 上下 */
-  .calday{padding:7px 0;font-size:14.5px}
+  /* 生辰表单是这一页第一个要碰的东西，全部按 44 走。
+     实测原来「时」「分」「夏令时」「具体问什么」都不足 44。 */
+  .form input,.form select,#askq,.calday,.calnav,#cardbtn,#dailylink,
+  #skipall,#readtoggle,#railtoggle,#srcclose,#close,#howbtn,#srcbtn,
+  #modeseg button,#cnseg button,.forget{min-height:44px}
+  .form label.ck input{width:22px;height:22px}
+  .calday{padding:7px 0;font-size:14.5px;display:flex;align-items:center;
+    justify-content:center}
   .calwk{font-size:12px;padding-bottom:4px}
   .calnav{padding:4px 8px;font-size:15.5px}
   .caltitle{font-size:14.5px}

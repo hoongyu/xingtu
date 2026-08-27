@@ -33,7 +33,7 @@
    源字体的 1.9%）。swap：字还没到时先用系统字显示，别让文字空着。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=205732e5') format('woff2');
+  src:url('./wenkai-subset.woff2?v=e1c4c981') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -241,6 +241,18 @@ body:not(.rail-off) #railtoggle{left:212px}
   letter-spacing:.06em;outline:none;transition:border-color .3s ease;
 }
 #q:focus{border-color:rgba(217,180,95,.5)}
+
+/* ── 焦点看得见 ────────────────────────────────────
+   全站原来只有三条 :focus 规则，也就是说键盘走到哪儿基本看不出来。
+   一条通则解决：**只在键盘操作时画**（:focus-visible，鼠标点击不画），
+   金色细线加两像素外扩，跟这个站别的强调一致。
+   放在这里而不是各控件里 —— 以后新加的控件自动就有。 */
+:where(a, button, select, input, textarea, [tabindex], [role="button"]):focus-visible{
+  outline:2px solid var(--gold);
+  outline-offset:2px;
+}
+/* 星图上的星与连线是 SVG，外扩画不出来，改成描一圈 */
+:where(#sky .linkhit, #sky .hit):focus-visible{outline:none;stroke:var(--gold)}
 #q::placeholder{color:var(--ink-quiet)}
 
 .railsec{margin-top:20px}
@@ -560,20 +572,6 @@ body.sphere.spinning #sky{cursor:grabbing}
   font-family:var(--song);font-size:12.5px;letter-spacing:.36em;color:var(--ink-quiet);
   transition:opacity .4s ease;pointer-events:none;
 }
-/* 这行提示本身可以点，点了把三行说明再放一遍。
-   说明只在头一回出现、关掉就再也调不回来 —— 那跟「不知道怎么操作」
-   是同一件事。后面那个问号是**唯一**说得清「这儿还能点」的记号：
-   一行居中的小字，不加记号谁也不会去点它。 */
-#hint.askable{pointer-events:auto;cursor:pointer}
-#hint.askable::after{
-  content:'?';display:inline-block;margin-left:.7em;width:1.35em;height:1.35em;
-  line-height:1.3em;letter-spacing:0;border:1px solid rgba(217,180,95,.5);
-  border-radius:50%;color:var(--gold);font-size:11px;vertical-align:1px;
-  transition:background .25s ease,color .25s ease;
-}
-#hint.askable:hover{color:var(--ink-dim)}
-#hint.askable:hover::after{background:var(--gold);color:var(--void)}
-#hint.askable:focus-visible{outline:1px solid var(--gold);outline-offset:6px}
 body:not(.rail-off) #bar{padding-left:240px}
 body:not(.rail-off) #panel{padding-left:242px}
 body:not(.rail-off) #hint{padding-left:212px}
@@ -625,7 +623,33 @@ body.open #hint{opacity:0}
   #nav a{font-size:12.5px;padding:4px 8px;letter-spacing:.12em}
   .seg button{font-size:12.5px;padding:5px 10px;letter-spacing:.12em}
   #where{gap:6px;font-size:12px}
-  #howbtn,#srcbtn{font-size:12px;padding:5px 8px;letter-spacing:.16em;
+  /* ── 手指点得准的下限 ────────────────────────────
+     实测这一屏上顶栏导航与分段控件只有 25 高、星官钮 32、
+     弹层的「关」30×24。最要紧的是那两个「关」：卡住的时候它是出口，
+     它们按 44 走（Apple 的下限，也是 WCAG 2.5.5）。
+
+     一度为了省顶栏高度把它们降到 40，理由是「顶栏从 120 涨到 172，
+     天球只剩 340 宽」。**那个理由是错的**：竖屏手机上球由**宽度**限死
+     （min(375,812)=375），顶栏高矮根本不影响球的大小。实测球占 256–596，
+     可用带 166–686，上下各富余 90 像素，既没缩小也没被裁。
+     降到 40 换来六像素顶栏高度和零收益，所以改回 44。
+     星官钮仍用 40：六十来枚全按 44 会把侧栏拉长将近一半，
+     而它是横向排开的，40 已经过了拇指的准头线。 */
+  #nav a,#bar .seg button,.viewseg button{min-height:44px;display:flex;
+    align-items:center;justify-content:center}
+  .chip{min-height:40px;display:flex;align-items:center}
+
+  /* 顶栏左上角那个「星 图」跟 nav 里当前那一项是同一个词，隔十个像素
+     出现两次。桌面上宽裕，手机上它白占一行的高度。nav 的 .cur 已经
+     说清在哪一页了，这儿藏掉。 */
+  #bar #title{display:none}
+  #srcclose,#close,#cardclose{min-width:44px;min-height:44px;display:flex;
+    align-items:center;justify-content:center}
+  #where select{min-height:44px}
+
+  #back,#railtoggle{min-height:44px}
+  #howbtn,#srcbtn{font-size:12px;padding:5px 8px;letter-spacing:.16em;min-height:44px;
+    display:flex;align-items:center;
     border-color:var(--ink-quiet)}
 
   /* 后退键：桌面在左上，手机上挪到顶栏底下，别压着标题 */
@@ -645,7 +669,10 @@ body.open #hint{opacity:0}
   #close{right:14px;top:14px;padding:4px 6px}
 
   /* 提示语让开底部那排键 */
-  #hint{bottom:calc(72px + env(safe-area-inset-bottom));font-size:12px;
+  /* 底部这一摞原来是叠着的：日签按钮 707–746、提示行 723–740，
+     实测按钮把提示的末尾三个字盖掉 84×12 像素。
+     从下往上重排一遍：安全区、检索拉手、日签按钮、提示行、说明框。 */
+  #hint{bottom:calc(112px + env(safe-area-inset-bottom));font-size:12px;
     letter-spacing:.2em;padding:0 12px}
 
 
@@ -740,7 +767,7 @@ body.open #hint{opacity:0}
   /* 让开底部那一摞：日签按钮 707–746、底行 723–740、侧栏拉手 756–798（375×812 实测）。
      原来是 72px，说明框正压在它们上面 —— 头一回来的人第一眼看到的
      就是三样东西叠在一起。 */
-  #firstrun{bottom:calc(122px + env(safe-area-inset-bottom));padding:15px 16px 11px}
+  #firstrun{bottom:calc(146px + env(safe-area-inset-bottom));padding:15px 16px 11px}
   #firstrun .fl{font-size:13.5px;line-height:1.7;margin-bottom:6px}
   #firstrun .fl{font-size:14.5px}
   #firstrun .fx{padding:8px 2px 2px;font-size:14.5px}

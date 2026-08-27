@@ -11,6 +11,7 @@
    能做但会很难读，交给时间轴干净得多。 */
 import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import * as BIRTH from './birth.js?v=af8e9281';
+import { a11y, armButtons, armGrid } from './a11y.js?v=b1004cb2';
 import { cast, ZHI, GAN } from './ziwei.js?v=f9ac3cd5';
 import { PALACE_WHY, STAR_WHY, AUX_WHY, HUA_WHY, JU_WHY, STANCE,
          STAR_MIRROR, EMPTY_MIRROR, PALACE_SHORT } from './ziwei.text.js?v=8cb9b134';
@@ -70,6 +71,8 @@ function calendar(){
     grid.appendChild(c);
   }
   box.appendChild(grid);
+  armGrid($('zcal'), '.zcalday');     // 同星盘：小历用方向键走（这一页的类名带 z）
+  armButtons($('zcal'));              // 翻月那四枚是后建的，渲完补一次
   $('zdstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
   // 同星盘：带着这里选的日子去星图看那一晚的天。hash 不进服务器日志。
   const dl = $('dailylink');
@@ -163,6 +166,8 @@ function draw(){
           + (s.hua ? `<span class="zhua">${s.hua}</span>` : '') + `</span>`).join('')
       + `</div><div class="zdx">${p.daxian[0]}–${p.daxian[1]}</div>`;
     el.addEventListener('click', () => { syncAsk(p.name); read(p); });
+    el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', p.name);
     g.appendChild(el);
     cells.push(el);
   });
@@ -424,6 +429,7 @@ function read(palace){
 
 /* ── 装配 ───────────────────────────────────────── */
 export function mount(){
+  a11y();
   // 上次填过就用上次那个。乾坤也记，它跟生辰一样是排盘的输入。
   if (SAVED){
     if (SAVED.hh != null) $('zh').value = SAVED.hh;

@@ -35,7 +35,7 @@
    霞鹜文楷，SIL OFL，已裁到只剩本站用到的字。 */
 @font-face{
   font-family:"LXGW WenKai Subset";
-  src:url('./wenkai-subset.woff2?v=205732e5') format('woff2');
+  src:url('./wenkai-subset.woff2?v=e1c4c981') format('woff2');
   font-weight:400;font-style:normal;font-display:swap;
 }
 
@@ -347,3 +347,24 @@ body.zread-off #zreadtoggle{right:0}
   border:1px solid var(--jie);transition:color .25s,border-color .25s;
 }
 #dailylink:hover{color:var(--zhu);border-color:var(--zhu-dim)}
+
+
+/* 手机上生辰表单是第一个要碰的东西，按 44 走（同星盘）。 */
+@media (max-width:820px){
+  #zh,#zmin,#zcast,#zaskq,.zcalday,.zcalnav,#zsrcbtn,#zsrcclose,
+  #zformtoggle,#zreadtoggle,#dailylink,#znav a,.forget{min-height:44px;
+    display:flex;align-items:center;justify-content:center}
+  /* 单选钮本身只有 22，点得中的应该是整条标签，不是那个小圆点 */
+  .zsex label{min-height:44px;display:flex;align-items:center;gap:8px}
+  .zsex input{width:22px;height:22px}
+}
+
+/* ── 焦点看得见 ────────────────────────────────────
+   **这一页不加载 engine.css**，所以基础层的每一条都得在这儿再写一遍。
+   加过一次就忘一次：焦点圈那条通则在 engine.css 里写好了，
+   这一页却漏下，实测六十四个元素走到了看不出来。
+   （凡是以后在 engine.css 里加的通则，都要回头看这一页。） */
+:where(a, button, select, input, textarea, [tabindex], [role="button"]):focus-visible{
+  outline:2px solid var(--zhu);
+  outline-offset:2px;
+}

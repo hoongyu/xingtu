@@ -9,7 +9,7 @@
 <meta property="og:image" content="https://hoongyu.github.io/xingtu/card.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>星图 · 中国星官</title>
-<link rel="stylesheet" href="engine.css?v=69ba48ec">
+<link rel="stylesheet" href="engine.css?v=e3af9a19">
 <div id="bar">
   <div id="title">星 图</div>
   <!-- 概念星图暂时从导航里撤下（页面与数据都还在，web/concept.html）。
@@ -19,6 +19,10 @@
   <div class="seg"></div>
   <div id="where">
     <span id="lost"></span>
+    <!-- 跟星盘那页同一枚。原来这一页把「再看一遍说明」挂在底部提示行后面
+         那个小问号上，手机上只有 17 像素高，拇指够不着；而把整条 375 宽的
+         横带做成可点，又会吞掉星图上的点击。放到顶栏，两头都解决。 -->
+    <div id="howbtn" title="再看一遍怎么操作">怎 么 看</div>
     <div id="srcbtn">来 源</div>
     <select id="site"></select>
   </div>
@@ -46,7 +50,7 @@
 </div>
 
 <script type="module">
-import { mount } from './engine.js?v=f9b5d493';
+import { mount } from './engine.js?v=5a4e80c9';
 import { CFG } from './sky.config.js?v=ace94b92';
 mount(CFG);
 </script>

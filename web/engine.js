@@ -10,6 +10,8 @@
  *
  * CFG 需要给的东西见 sky.config.js / concept.config.js，两边对照着看最清楚。
  */
+import { a11y, armButtons } from './a11y.js?v=b1004cb2';
+
 export function mount(CFG){
   // 图面半径由配置给。它本来就是配置该管的量（星图的投影要用它算），
   // 从引擎导出会让配置反向 import 引擎 —— 加版本戳时那会把引擎加载两遍。
@@ -1444,6 +1446,14 @@ function fullVB(){
 
 function frameOn(cx, cy, size, ms){
   const W = innerWidth, H = innerHeight;
+  /* 量不到窗口尺寸时直接落位，别算。
+     scale 会是 0，除下去得到 ±Infinity 写进 viewBox，整张图当场白掉 ——
+     而这种「白屏」没有报错，只有控制台一行 SVG 属性警告。
+     fullVB 那边早就有这道守卫，这儿漏了。 */
+  if (!W || !H){
+    setVB(`${cx - size / 2} ${cy - size / 2} ${size} ${size}`);
+    return;
+  }
   const scale = Math.min(W, H) / size;
   const f = freeBox();
   const tx = f.x + f.w / 2, ty = f.y + f.h / 2;
@@ -1591,6 +1601,7 @@ bindPan();
 bindHover();
 bindView();
 scrollEdges();
+a11y();
 
 /* 日签的入口。只有星图有 —— 概念图没有观测地，也没有「今晚」。 */
 if (CFG.sites){
@@ -1757,6 +1768,7 @@ function renderSecs(){
   const secs = document.getElementById('secs');
   secs.innerHTML = '';
   for (const [title, list] of CFG.rail) secs.appendChild(chipRow(title, list));
+  armButtons(secs);            // 侧栏是后渲染的，渲完把它收进 Tab 序
   refreshEdges();
 }
 
@@ -1854,18 +1866,12 @@ function showGuide(){
 }
 
 {
-  const h = document.getElementById('hint');
-  if (h && CFG.text.firstrun){
-    h.classList.add('askable');
-    h.setAttribute('role', 'button');
-    h.setAttribute('tabindex', '0');
-    h.title = '再看一遍怎么操作';
-    const open = () => showGuide();
-    h.addEventListener('click', open);
-    h.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); }
-    });
-  }
+  /* 「再看一遍」原来挂在底部提示行后面那个小问号上。手机上那行只有
+     十七像素高，拇指够不着；而把整条铺满宽度的横带做成可点，
+     又会吞掉星图上的点击。改挂到顶栏一枚按钮上，跟星盘那页一致。
+     底部那行回到它本来的身份：只说明当下能做什么，不承担交互。 */
+  const hb = document.getElementById('howbtn');
+  if (hb && CFG.text.firstrun) hb.addEventListener('click', () => showGuide());
   try { firstVisit = !localStorage.getItem('xingtu-seen'); } catch (_){}
   if (firstVisit) showGuide();
 }

@@ -16,6 +16,7 @@ import { gsap } from './gsap.esm.js?v=7cc4cd8f';
 import * as CARD from './card.js?v=d4470917';
 import { toLunar } from './lunar.js?v=6a22c0e6';
 import * as BIRTH from './birth.js?v=af8e9281';
+import { a11y, armButtons, armGrid } from './a11y.js?v=b1004cb2';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 340;
@@ -125,6 +126,8 @@ function calendar(){
     grid.appendChild(c);
   }
   box.appendChild(grid);
+  armGrid($('cal'), '.calday');       // 小历用方向键走，整块只占一个 Tab 位
+  armButtons($('bar'));
   $('dstamp').textContent = `${pick.y} 年 ${pick.m} 月 ${pick.d} 日`;
   /* 日签在星图那页，带着这里选的日子过去。
      用 # 片段不用查询串：hash 不会随请求发出去，也不进服务器日志 ——
@@ -1756,6 +1759,7 @@ function closePanel(){
 
 /* ── 装配 ───────────────────────────────────── */
 export function mount(){
+  a11y();
   const sel = $('bcity');
   PLACES.forEach((pl, i) => {
     const o = document.createElement('option');

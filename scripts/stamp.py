@@ -17,7 +17,7 @@ ASSETS = ['engine.css', 'engine.js', 'sky.config.js', 'concept.config.js',
           'astro.css', 'astro.js', 'ephem.js', 'places.js',
           'wenkai-subset.woff2',
           'ziwei.css', 'ziwei.js', 'ziwei.page.js', 'ziwei.text.js',
-          'card.js', 'birth.js',
+          'card.js', 'birth.js', 'a11y.js',
           'lunar.js', 'gsap.esm.js']
 
 
