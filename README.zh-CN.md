@@ -125,3 +125,7 @@ python -m http.server 8777 --directory web
 
 出生日期、时间、地点全部在浏览器里算，不上传。地点用内置城市表，
 不调第三方地理编码 —— 那是个人数据。
+
+## 许可证
+
+代码（引擎、配置和构建脚本）采用 [Apache License 2.0](LICENSE)。第三方数据和插画沿用各自的许可证，见上面「数据来源与授权」一表；`web/art/` 下的星座插画仍按 Free Art License 1.3。

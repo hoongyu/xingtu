@@ -111,3 +111,7 @@ The illustrations come with an **engineering constraint**: under Article 4 of th
 **How to read those positions is a matter of tradition.** Astrology is a cultural system more than two thousand years old, but it is not a predictive science. The page labels the two separately, and its entries say "traditionally held to".
 
 Birth date, time and place are all computed in the browser and never uploaded. Places come from a built-in city table, with no third-party geocoding, because that is personal data.
+
+## License
+
+The code (the engine, configurations and build scripts) is licensed under the [Apache License 2.0](LICENSE). Third-party data and illustrations keep their own licences, listed in the table under "Data sources and licences" above; the constellation illustrations in `web/art/` remain under the Free Art License 1.3.
